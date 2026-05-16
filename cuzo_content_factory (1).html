@@ -767,6 +767,10 @@ function initGate() {
 
 // ── APP INIT ──
 function initApp() {
+  // Pre-load credentials if not already set
+  if(!localStorage.getItem('cuzo_kie_key'))    localStorage.setItem('cuzo_kie_key',    '47b5acc50292f9b00b7da66e25dfb497');
+  if(!localStorage.getItem('cuzo_cld_cloud'))  localStorage.setItem('cuzo_cld_cloud',  'duqitd5xn');
+  if(!localStorage.getItem('cuzo_cld_preset')) localStorage.setItem('cuzo_cld_preset', 'cuzo_refs');
   buildModelBar();
   loadSettingsInputs();
   updateCostDisplay();
