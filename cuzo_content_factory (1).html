@@ -1,0 +1,1912 @@
+<!--
+  CUZO CONTENT FACTORY — AI Generation Dashboard
+  Version: 1.0
+  Models: Kim, Ruby, Luna, Aiko, Suly, Lyssa
+  To change password: search for "Cuzo.123" and replace
+  To add/edit models: find the MODELS array in the JS section
+  KIE Docs: https://docs.kie.ai
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cuzo Content Factory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#000000;--surface:#080808;--card:#0f0f0f;--border:#1c1c1c;
+  --gold:#ffffff;--gold2:#d4d4d4;--gold-dim:#3a3a3a;
+  --text:#ffffff;--muted:#444444;--muted2:#888888;
+  --success:#22c55e;--error:#ef4444;--warn:#f59e0b;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-size:13px;line-height:1.5}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+
+/* GATE */
+#gate{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;align-items:center;justify-content:center}
+#gate.hidden{display:none}
+.gate-card{background:#0a0a0a;border:1px solid #222;border-radius:20px;padding:52px 44px;width:380px;text-align:center;box-shadow:0 0 0 1px #1a1a1a,0 40px 100px rgba(0,0,0,.9)}
+.gate-logo{font-family:'Playfair Display',serif;font-size:32px;color:#fff;margin-bottom:6px;letter-spacing:.5px;font-weight:700}
+.gate-sub{color:#444;font-size:10px;letter-spacing:3px;text-transform:uppercase;margin-bottom:36px;font-weight:500}
+.gate-input{width:100%;background:#000;border:1px solid #222;border-radius:10px;color:#fff;padding:13px 16px;font-size:14px;font-family:'Inter',sans-serif;margin-bottom:14px;outline:none;transition:border-color .2s;text-align:center;letter-spacing:4px}
+.gate-input:focus{border-color:#555}
+.gate-input::placeholder{color:#333;letter-spacing:1px}
+.gate-input.error{border-color:var(--error);animation:shake .4s ease}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+.gate-btn{width:100%;background:#fff;border:none;border-radius:10px;color:#000;font-weight:700;font-size:14px;padding:14px;cursor:pointer;font-family:'Inter',sans-serif;transition:background .18s,transform .1s;letter-spacing:.5px}
+.gate-btn:hover{background:#e8e8e8;transform:translateY(-1px)}
+.gate-btn:active{transform:translateY(0)}
+.gate-err{color:var(--error);font-size:12px;margin-top:10px;min-height:18px}
+
+/* APP SHELL */
+#app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+#app.hidden{display:none}
+
+/* TOPBAR */
+#topbar{height:52px;min-height:52px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:16px;z-index:100;position:sticky;top:0}
+.topbar-logo{font-family:'Playfair Display',serif;font-size:18px;color:var(--gold);letter-spacing:.3px;white-space:nowrap}
+.topbar-logo span{color:var(--muted2);font-size:11px;font-family:'Inter',sans-serif;font-weight:400;margin-left:6px;letter-spacing:1px;text-transform:uppercase}
+.topbar-spacer{flex:1}
+.topbar-stat{display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:12px;color:var(--muted2)}
+.topbar-stat strong{color:var(--gold)}
+#api-dot{width:7px;height:7px;border-radius:50%;background:var(--muted);transition:background .3s}
+#api-dot.ok{background:var(--success)}
+#api-dot.err{background:var(--error)}
+.topbar-btn{background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--muted2);padding:6px 12px;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif;transition:all .18s;display:flex;align-items:center;gap:6px}
+.topbar-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
+#cors-banner{background:#2a1a00;border-bottom:1px solid var(--warn);padding:8px 20px;font-size:12px;color:var(--warn);display:none;align-items:center;gap:10px}
+#cors-banner.show{display:flex}
+
+/* MODEL BAR */
+#modelbar{height:44px;min-height:44px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:8px;z-index:99;overflow-x:auto;flex-shrink:0}
+.model-chip{display:flex;align-items:center;gap:7px;background:var(--card);border:1.5px solid var(--border);border-radius:20px;padding:5px 14px;cursor:pointer;transition:all .18s;white-space:nowrap;font-size:12px;font-weight:500;color:var(--muted2);user-select:none}
+.model-chip:hover{border-color:var(--muted);color:var(--text)}
+.model-chip .mdot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.model-chip .mcheck{display:none;width:14px;height:14px;border-radius:3px;border:1.5px solid var(--muted);align-items:center;justify-content:center;font-size:9px}
+body.multi-mode .model-chip .mcheck{display:flex}
+body.multi-mode .model-chip.msel .mcheck{background:var(--gold);border-color:var(--gold);color:#000}
+.multi-toggle{background:var(--card);border:1.5px solid var(--border);border-radius:20px;padding:5px 12px;cursor:pointer;font-size:11px;font-weight:500;color:var(--muted2);transition:all .18s;margin-left:auto;white-space:nowrap;font-family:'Inter',sans-serif}
+.multi-toggle.active{border-color:var(--gold);color:var(--gold)}
+
+/* MAIN */
+#main{display:flex;flex:1;overflow:hidden}
+
+/* LEFT PANEL */
+#lpanel{width:340px;min-width:340px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.ptabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.ptab{flex:1;padding:12px 8px;text-align:center;font-size:12px;font-weight:500;color:var(--muted2);cursor:pointer;border-bottom:2px solid transparent;transition:all .18s;user-select:none}
+.ptab.active{color:var(--gold);border-bottom-color:var(--gold)}
+.ptab:hover:not(.active){color:var(--text)}
+.pscroll{flex:1;overflow-y:auto;padding:16px}
+.stabs{display:flex;gap:4px;margin-bottom:16px;background:var(--card);border-radius:8px;padding:3px}
+.stab{flex:1;padding:6px;text-align:center;font-size:11px;font-weight:500;color:var(--muted2);cursor:pointer;border-radius:6px;transition:all .18s}
+.stab.active{background:var(--surface);color:var(--text)}
+.vi-toggle-on{background:var(--text)!important}
+.vi-toggle-on::after{transform:translateX(16px)!important}
+#vi-ms-track::after{content:'';position:absolute;height:16px;width:16px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.2s}
+
+/* FORM */
+.fg{margin-bottom:14px}
+.fl{display:block;font-size:11px;color:var(--muted2);margin-bottom:5px;font-weight:500;letter-spacing:.3px;text-transform:uppercase}
+.fl span{color:var(--muted);text-transform:none;font-weight:400;font-size:10px;margin-left:4px}
+textarea,select,input[type=text],input[type=password]{width:100%;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:9px 11px;font-size:12px;font-family:'Inter',sans-serif;outline:none;transition:border-color .18s;resize:none}
+textarea:focus,select:focus,input:focus{border-color:var(--gold-dim)}
+textarea{min-height:80px}
+textarea.sm{min-height:52px}
+select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2355556a'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
+select option{background:var(--card)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.gen-btn{width:100%;padding:11px;background:linear-gradient(135deg,var(--gold),var(--gold2));border:none;border-radius:8px;color:#09090f;font-weight:600;font-size:13px;font-family:'Inter',sans-serif;cursor:pointer;transition:opacity .18s,transform .1s;display:flex;align-items:center;justify-content:center;gap:8px}
+.gen-btn:hover{opacity:.9;transform:translateY(-1px)}
+.gen-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.gen-btn.multi{background:linear-gradient(135deg,#9333ea,#7e22ce);color:#fff}
+.cost-prev{text-align:center;color:var(--muted2);font-size:11px;margin:8px 0 12px;min-height:16px}
+.cost-prev strong{color:var(--gold)}
+.spinner{width:14px;height:14px;border:2px solid rgba(0,0,0,.3);border-top-color:#09090f;border-radius:50%;animation:spin .7s linear infinite}
+.spinner.lt{border-color:rgba(255,255,255,.2);border-top-color:var(--text)}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* REFS */
+.refs-grid{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;min-height:20px}
+.rthumb-wrap{position:relative}
+.rthumb-wrap:hover .rdel{opacity:1}
+.rthumb{width:58px;height:76px;border-radius:6px;object-fit:cover;border:1px solid var(--border)}
+.rdel{position:absolute;top:-5px;right:-5px;width:17px;height:17px;background:var(--error);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;cursor:pointer;opacity:0;transition:opacity .15s;border:1.5px solid var(--surface)}
+.upload-btn{background:var(--card);border:1.5px dashed var(--border);border-radius:8px;color:var(--muted2);padding:8px 12px;font-size:11px;cursor:pointer;transition:all .18s;display:flex;align-items:center;gap:6px;width:100%;font-family:'Inter',sans-serif;justify-content:center}
+.upload-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
+.info-chip{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11px;color:var(--muted2);margin-bottom:14px}
+
+/* RIGHT PANEL */
+#rpanel{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.obar{display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface);gap:10px;flex-shrink:0;flex-wrap:wrap;position:sticky;top:0;z-index:10}
+.obar-title{font-size:13px;font-weight:600}
+.badge{background:rgba(212,175,55,.15);border:1px solid var(--gold-dim);color:var(--gold);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500}
+.obtn{background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--muted2);padding:5px 10px;font-size:11px;cursor:pointer;transition:all .18s;font-family:'Inter',sans-serif}
+.obtn:hover{border-color:var(--muted);color:var(--text)}
+.obtn.dng:hover{border-color:var(--error);color:var(--error)}
+.osp{flex:1}
+
+/* OUTPUT GRID */
+#ogrid{flex:1;padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;align-content:start}
+.msec{grid-column:1/-1;margin-top:8px}
+.msec-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:10px}
+.msec-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+
+/* EMPTY STATE */
+#empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--muted);padding:40px}
+#empty.hidden{display:none}
+.empty-logo{font-family:'Playfair Display',serif;font-size:32px;color:var(--gold-dim);opacity:.6}
+
+/* GEN CARD */
+.gcard{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;position:relative;aspect-ratio:9/16;display:flex;align-items:center;justify-content:center;transition:transform .15s,border-color .15s}
+.gcard:hover{transform:translateY(-2px)}
+.gcard.r45{aspect-ratio:4/5}
+.gcard.r11{aspect-ratio:1/1}
+.gcard.r169{aspect-ratio:16/9}
+.gcard.r34{aspect-ratio:3/4}
+.gcard.fail{border-color:rgba(239,68,68,.35)}
+.gcard img,.gcard video{width:100%;height:100%;object-fit:cover;display:block}
+.cbadge{position:absolute;top:8px;left:8px;z-index:2;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:600;letter-spacing:.5px;background:rgba(0,0,0,.7);backdrop-filter:blur(4px)}
+.ctype{position:absolute;top:8px;right:8px;z-index:2;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);border-radius:4px;padding:2px 7px;font-size:10px;color:var(--muted2)}
+.cpend{display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px}
+.cpend-lbl{font-size:11px;color:var(--muted2);text-align:center}
+.cprog-wrap{width:100px;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+.cprog{height:100%;background:var(--gold);border-radius:2px;animation:prog 180s ease-out forwards}
+@keyframes prog{from{width:0}to{width:90%}}
+.covlay{position:absolute;inset:0;z-index:3;background:linear-gradient(to top,rgba(0,0,0,.85) 0%,transparent 55%);opacity:0;transition:opacity .2s;display:flex;flex-direction:column;justify-content:flex-end;padding:10px}
+.gcard:hover .covlay{opacity:1}
+.covprompt{font-size:10px;color:rgba(255,255,255,.7);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin-bottom:8px}
+.covact{display:flex;gap:6px;flex-wrap:wrap}
+.covbtn{background:rgba(255,255,255,.15);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.2);border-radius:5px;color:#fff;padding:4px 9px;font-size:10px;cursor:pointer;font-family:'Inter',sans-serif;transition:background .15s}
+.covbtn:hover{background:rgba(255,255,255,.25)}
+.covcost{font-size:10px;color:var(--gold);margin-left:auto;align-self:center}
+.cfail{display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px;text-align:center}
+.cfail-icon{font-size:20px;color:var(--error)}
+.cfail-msg{font-size:10px;color:var(--muted2)}
+.cretry{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:var(--error);border-radius:5px;padding:4px 10px;font-size:10px;cursor:pointer;font-family:'Inter',sans-serif}
+
+/* SETTINGS PANEL */
+#spanel{position:fixed;top:0;right:0;bottom:0;width:380px;background:var(--surface);border-left:1px solid var(--border);z-index:500;transform:translateX(100%);transition:transform .25s ease;overflow-y:auto;padding:20px}
+#spanel.open{transform:translateX(0)}
+#sovlay{position:fixed;inset:0;z-index:499;background:rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:opacity .25s}
+#sovlay.open{opacity:1;pointer-events:all}
+.stitle{font-family:'Playfair Display',serif;font-size:18px;color:var(--text);margin-bottom:20px;display:flex;align-items:center;justify-content:space-between}
+.sclose{background:none;border:none;color:var(--muted2);font-size:18px;cursor:pointer;padding:4px}
+.ssec{margin-bottom:24px;padding-bottom:24px;border-bottom:1px solid var(--border)}
+.ssec:last-child{border-bottom:none}
+.ssec-title{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+.pw-wrap{position:relative}
+.pw-wrap input{padding-right:36px}
+.pw-toggle{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted2);cursor:pointer;font-size:13px;padding:2px}
+.tbtn{background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--muted2);padding:7px 12px;font-size:11px;cursor:pointer;font-family:'Inter',sans-serif;transition:all .18s;margin-top:8px}
+.tbtn:hover{border-color:var(--muted);color:var(--text)}
+.dbtn{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:6px;color:var(--error);padding:7px 12px;font-size:11px;cursor:pointer;font-family:'Inter',sans-serif;transition:all .18s}
+.dbtn:hover{background:rgba(239,68,68,.2)}
+.tresult{font-size:11px;margin-top:6px;min-height:16px}
+.tresult.ok{color:var(--success)}
+.tresult.err{color:var(--error)}
+.sref{margin-bottom:12px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px}
+.sref-title{font-size:11px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+
+/* MODEL MANAGER */
+.model-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--card);border:1px solid var(--border);border-radius:8px;margin-bottom:6px}
+.model-row-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.model-row-name{font-size:12px;font-weight:600;flex:1}
+.model-row-niche{font-size:10px;color:var(--muted2);flex:2;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.model-row-actions{display:flex;gap:4px;flex-shrink:0}
+.mibtn{background:none;border:1px solid var(--border);border-radius:5px;color:var(--muted2);padding:3px 8px;font-size:10px;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s}
+.mibtn:hover{border-color:var(--muted);color:var(--text)}
+.mibtn.del:hover{border-color:var(--error);color:var(--error)}
+.add-model-form{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:10px;display:none}
+.add-model-form.open{display:block}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.color-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.color-preview{width:28px;height:28px;border-radius:6px;border:1px solid var(--border);flex-shrink:0}
+input[type=color]{width:0;height:0;opacity:0;position:absolute}
+.storage-note{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:11px;color:var(--muted2);line-height:1.6;margin-bottom:12px}
+.storage-note strong{color:var(--text)}
+
+/* MODEL IDENTITY PANEL */
+#id-panel{position:fixed;top:0;left:0;bottom:0;width:420px;background:#000;border-right:1px solid #1a1a1a;z-index:800;transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);overflow-y:auto;display:flex;flex-direction:column}
+#id-panel.open{transform:translateX(0)}
+#id-overlay{position:fixed;inset:0;z-index:799;background:rgba(0,0,0,.7);opacity:0;pointer-events:none;transition:opacity .28s}
+#id-overlay.open{opacity:1;pointer-events:all}
+.id-hero{position:relative;width:100%;aspect-ratio:3/4;background:var(--card);flex-shrink:0;overflow:hidden}
+.id-hero img{width:100%;height:100%;object-fit:cover}
+.id-hero-empty{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-size:64px;opacity:.1}
+.id-hero-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.9) 0%,transparent 50%);display:flex;flex-direction:column;justify-content:flex-end;padding:20px}
+.id-hero-name{font-family:'Playfair Display',serif;font-size:32px;font-weight:700;color:#fff;line-height:1}
+.id-hero-niche{font-size:12px;color:rgba(255,255,255,.5);margin-top:4px;letter-spacing:.5px}
+.id-close{position:absolute;top:14px;right:14px;width:32px;height:32px;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.1);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff;font-size:16px;z-index:2}
+.id-body{padding:20px;flex:1}
+.id-section-title{font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#444;margin-bottom:10px}
+.id-ref-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:20px}
+.id-ref-thumb{aspect-ratio:3/4;border-radius:6px;object-fit:cover;border:1px solid #1a1a1a;cursor:pointer;transition:opacity .15s}
+.id-ref-thumb:hover{opacity:.8}
+.id-ref-empty{aspect-ratio:3/4;border-radius:6px;border:1.5px dashed #222;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:border-color .15s;font-size:18px;color:#333}
+.id-ref-empty:hover{border-color:#444}
+.id-notes{width:100%;background:#0a0a0a;border:1px solid #1a1a1a;border-radius:8px;color:#fff;padding:10px 12px;font-size:12px;font-family:'Inter',sans-serif;resize:none;outline:none;min-height:80px;line-height:1.6;transition:border-color .18s;margin-bottom:16px}
+.id-notes:focus{border-color:#333}
+.id-always{width:100%;background:#0a0a0a;border:1px solid #222;border-radius:8px;color:rgba(255,255,255,.8);padding:10px 12px;font-size:12px;font-family:'Inter',sans-serif;resize:none;outline:none;min-height:60px;line-height:1.6;transition:border-color .18s}
+.id-always:focus{border-color:#444}
+.id-always-note{font-size:10px;color:#444;margin-top:6px;line-height:1.5}
+.id-chip-btn{background:none;border:none;cursor:pointer;padding:0;margin:0;display:flex;align-items:center}
+.model-chip .id-chip-btn{opacity:0;transition:opacity .15s;margin-left:2px}
+.model-chip:hover .id-chip-btn{opacity:1}
+
+/* HISTORY */
+#hpanel{position:fixed;inset:0;z-index:600;background:var(--bg);display:flex;flex-direction:column;transform:translateY(100%);transition:transform .3s ease}
+#hpanel.open{transform:translateY(0)}
+.hheader{display:flex;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);gap:12px;background:var(--surface)}
+.htitle{font-family:'Playfair Display',serif;font-size:20px;color:var(--text)}
+.hclose{margin-left:auto;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--muted2);padding:6px 12px;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif}
+.hfilters{display:flex;gap:6px;padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto;flex-shrink:0}
+.hfil{background:var(--card);border:1.5px solid var(--border);border-radius:20px;padding:4px 12px;font-size:11px;color:var(--muted2);cursor:pointer;transition:all .15s;white-space:nowrap}
+.hfil.active{border-color:var(--gold);color:var(--gold)}
+.hsearch{padding:10px 20px;background:var(--surface);border-bottom:1px solid var(--border)}
+#hgrid{flex:1;overflow-y:auto;padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;align-content:start}
+.hcard{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;aspect-ratio:9/16;cursor:pointer;transition:all .15s;position:relative}
+.hcard:hover{transform:translateY(-2px);border-color:var(--muted)}
+.hcard img,.hcard video{width:100%;height:100%;object-fit:cover}
+.hcard-info{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,.85),transparent);padding:20px 7px 7px;opacity:0;transition:opacity .15s}
+.hcard:hover .hcard-info{opacity:1}
+.hcard-model{font-size:9px;font-weight:600}
+.hcard-prompt{font-size:9px;color:rgba(255,255,255,.6);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+
+/* VIEWER */
+#viewer{position:fixed;inset:0;z-index:700;background:rgba(0,0,0,.95);display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+#viewer.open{display:flex}
+#viewer img,#viewer video{max-width:90vw;max-height:80vh;border-radius:8px;object-fit:contain}
+.vclose{position:absolute;top:16px;right:16px;background:rgba(255,255,255,.1);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+
+/* MOBILE */
+@media(max-width:768px){
+  #lpanel{position:fixed;bottom:0;left:0;right:0;width:100%;max-height:60vh;z-index:200;border-right:none;border-top:1px solid var(--border);transform:translateY(100%);transition:transform .25s ease}
+  #lpanel.open{transform:translateY(0)}
+  #rpanel{width:100%}
+  #mfab{display:flex!important}
+}
+#mfab{display:none;position:fixed;bottom:16px;right:16px;z-index:199;width:48px;height:48px;background:linear-gradient(135deg,var(--gold),var(--gold2));border-radius:50%;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 20px rgba(212,175,55,.4);border:none;font-size:20px;color:#09090f;font-weight:700}
+</style>
+</head>
+<body>
+
+<!-- PASSWORD GATE -->
+<div id="gate">
+  <div class="gate-card">
+    <div class="gate-logo">Cuzo</div>
+    <div class="gate-sub">Content Factory</div>
+    <input type="password" id="gi" class="gate-input" placeholder="Enter password" autocomplete="off" onkeydown="if(event.key==='Enter')tryGate()">
+    <button type="button" class="gate-btn" id="gbtn" onclick="tryGate()">Enter Dashboard</button>
+    <div class="gate-err" id="gerr"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hidden">
+
+  <!-- CORS BANNER -->
+  <div id="cors-banner">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    CORS error detected — KIE.ai is blocking direct browser requests. A backend proxy may be needed. Contact your agency admin.
+    <a href="https://railway.app" target="_blank" style="color:var(--warn);margin-left:4px;text-decoration:underline">Railway deploy guide</a>
+  </div>
+
+  <!-- TOPBAR -->
+  <div id="topbar">
+    <div class="topbar-logo">Cuzo <span>Content Factory</span></div>
+    <div class="topbar-stat"><div id="api-dot"></div><span id="api-txt">No key</span></div>
+    <div class="topbar-stat">Today: <strong id="today-cost">~$0.00</strong></div>
+    <div class="topbar-spacer"></div>
+    <button class="topbar-btn" id="hbtn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>History
+    </button>
+    <button class="topbar-btn" id="sbtn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings
+    </button>
+  </div>
+
+  <!-- MODEL BAR -->
+  <div id="modelbar">
+    <div id="mchips" style="display:flex;gap:8px;align-items:center"></div>
+    <button class="multi-toggle" id="multibtn">Multi</button>
+  </div>
+
+  <!-- MAIN -->
+  <div id="main">
+
+    <!-- LEFT PANEL -->
+    <div id="lpanel">
+      <div class="ptabs">
+        <div class="ptab active" data-t="images">Images</div>
+        <div class="ptab" data-t="video">Video</div>
+      </div>
+
+      <!-- IMAGES TAB -->
+      <div id="timages" class="pscroll">
+        <div class="stabs">
+          <div class="stab active" data-s="sd">Seedream</div>
+          <div class="stab" data-s="nb">NanoBanana</div>
+        </div>
+
+        <!-- SEEDREAM -->
+        <div id="ssd">
+          <div class="fg">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <label class="fl" style="margin:0">Reference Photos <span id="sd-rc">(0/8)</span> <span id="sd-ref-note" style="color:var(--muted2)">(select Edit model to use)</span></label>
+            </div>
+            <div id="sd-rg" class="refs-grid"></div>
+            <button class="upload-btn" id="sd-up">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Upload Reference Photos (max 8)
+            </button>
+            <input type="file" id="sd-fi" accept="image/jpeg,image/png,image/webp" multiple style="display:none">
+            <div id="sd-rw" style="display:none;color:var(--warn);font-size:10px;margin-top:6px">Cloudinary not configured — add Cloud Name &amp; Upload Preset in Settings.</div>
+          </div>
+          <div class="fg"><label class="fl">Prompt</label><textarea id="sd-p" placeholder="Describe the image in detail…"></textarea></div>
+          <div class="fg"><label class="fl">Negative Prompt <span>(optional)</span></label><textarea id="sd-n" class="sm" placeholder="ugly, blurry, watermark, low quality…"></textarea></div>
+          <div class="fg">
+            <label class="fl">Model</label>
+            <select id="sd-m">
+              <option value="seedream/4.5-edit">Seedream 4.5 Edit ✦ refs</option>
+              <option value="seedream/4.5-text-to-image">Seedream 4.5 Text-only</option>
+              <option value="bytedance/seedream-v4-text-to-image">Seedream 4.0</option>
+              <option value="bytedance/seedream">Seedream 3.0</option>
+              <option value="__c">Custom…</option>
+            </select>
+            <input type="text" id="sd-mc" placeholder="Enter model string" style="display:none;margin-top:6px">
+          </div>
+          <div class="row2">
+            <div class="fg"><label class="fl">Aspect Ratio</label><select id="sd-r"><option value="9:16">9:16</option><option value="3:4">3:4</option><option value="1:1">1:1</option><option value="4:3">4:3</option><option value="16:9">16:9</option><option value="21:9">21:9</option></select></div>
+            <div class="fg"><label class="fl">Quality</label><select id="sd-q"><option value="basic">Basic (2K)</option><option value="high">High (4K)</option></select></div>
+          </div>
+          <div class="row2">
+            <div class="fg"><label class="fl">Count</label><select id="sd-c"><option value="1">1</option><option value="2">2</option><option value="4" selected>4</option><option value="6">6</option></select></div>
+            <div class="fg"><label class="fl">Format</label><select id="sd-f"><option value="jpg">JPG</option><option value="png">PNG</option><option value="webp">WebP</option></select></div>
+          </div>
+          <div class="cost-prev" id="sd-cp"></div>
+          <button class="gen-btn" id="sd-gen">Generate</button>
+        </div>
+
+        <!-- NANOBANANA -->
+        <div id="snb" style="display:none">
+          <div class="info-chip">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span style="color:var(--muted);font-size:10px">Model:</span> nano-banana-pro
+          </div>
+          <div class="fg">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <label class="fl" style="margin:0">Reference Photos <span id="nb-rc">(0/8)</span></label>
+            </div>
+            <div id="nb-rg" class="refs-grid"></div>
+            <button class="upload-btn" id="nb-up">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Upload Reference Photos (max 8)
+            </button>
+            <input type="file" id="nb-fi" accept="image/jpeg,image/png,image/webp" multiple style="display:none">
+            <div id="nb-rw" style="display:none;color:var(--warn);font-size:10px;margin-top:6px">Cloudinary not configured — add Cloud Name &amp; Upload Preset in Settings.</div>
+          </div>
+          <div class="fg"><label class="fl">Prompt</label><textarea id="nb-p" placeholder="Describe the image in detail…"></textarea></div>
+          <div class="row2">
+            <div class="fg"><label class="fl">Aspect Ratio</label><select id="nb-r"><option value="9:16">9:16</option><option value="4:5">4:5</option><option value="1:1">1:1</option><option value="16:9">16:9</option></select></div>
+            <div class="fg"><label class="fl">Resolution</label><select id="nb-res"><option value="2K">2K</option><option value="4K">4K</option></select></div>
+          </div>
+          <div class="row2">
+            <div class="fg"><label class="fl">Count</label><select id="nb-c"><option value="1">1</option><option value="2">2</option><option value="4" selected>4</option><option value="6">6</option></select></div>
+            <div class="fg"><label class="fl">Format</label><select id="nb-f"><option value="jpg">JPG</option><option value="png">PNG</option></select></div>
+          </div>
+          <div class="cost-prev" id="nb-cp"></div>
+          <button class="gen-btn" id="nb-gen">Generate</button>
+        </div>
+      </div>
+
+      <!-- VIDEO TAB -->
+      <div id="tvideo" class="pscroll" style="display:none">
+        <div class="stabs" style="margin-bottom:16px">
+          <div class="stab active" data-vs="txt">Text to Video</div>
+          <div class="stab" data-vs="mc">Motion Control</div>
+        </div>
+
+        <!-- TEXT TO VIDEO -->
+        <div id="vs-txt">
+          <!-- Start + End frame -->
+          <div class="fg">
+            <label class="fl">Frames <span>(optional)</span></label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <!-- Start frame -->
+              <div>
+                <div style="font-size:10px;color:var(--muted2);margin-bottom:5px">Start frame</div>
+                <div id="vi-sf-slot" onclick="document.getElementById('vi-sf-fi').click()" style="aspect-ratio:3/4;background:var(--card);border:1.5px dashed var(--border);border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;overflow:hidden;transition:border-color .18s">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted2)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  <span style="font-size:9px;color:var(--muted2)">Upload</span>
+                </div>
+                <button type="button" id="vi-sf-clr" onclick="clearViStartFrame()" style="display:none;font-size:9px;background:transparent;border:none;color:var(--muted2);cursor:pointer;margin-top:3px;padding:0">✕ Remove</button>
+                <input type="file" id="vi-sf-fi" accept="image/*" style="display:none">
+              </div>
+              <!-- End frame -->
+              <div>
+                <div style="font-size:10px;color:var(--muted2);margin-bottom:5px">End frame</div>
+                <div id="vi-ef-slot" onclick="document.getElementById('vi-ef-fi').click()" style="aspect-ratio:3/4;background:var(--card);border:1.5px dashed var(--border);border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;overflow:hidden;transition:border-color .18s">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted2)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  <span style="font-size:9px;color:var(--muted2)">Upload</span>
+                </div>
+                <button type="button" id="vi-ef-clr" onclick="clearViEndFrame()" style="display:none;font-size:9px;background:transparent;border:none;color:var(--muted2);cursor:pointer;margin-top:3px;padding:0">✕ Remove</button>
+                <input type="file" id="vi-ef-fi" accept="image/*" style="display:none">
+              </div>
+            </div>
+          </div>
+          <!-- Multi-shot toggle -->
+          <div class="fg" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--card);border-radius:8px;border:1px solid var(--border)">
+            <div>
+              <div style="font-size:13px;font-weight:500;color:var(--text)">Multi-shot</div>
+              <div style="font-size:10px;color:var(--muted2);margin-top:2px">Multiple scenes in one generation</div>
+            </div>
+            <label style="position:relative;display:inline-block;width:38px;height:22px;flex-shrink:0">
+              <input type="checkbox" id="vi-multishot" style="opacity:0;width:0;height:0">
+              <span onclick="this.previousElementSibling.click()" style="position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:11px;transition:.2s" id="vi-ms-track"></span>
+            </label>
+          </div>
+          <div class="fg"><label class="fl">Prompt</label><textarea id="vi-p" placeholder="Describe the video scene in detail…"></textarea></div>
+          <div class="fg"><label class="fl">Negative Prompt <span>(optional)</span></label><textarea id="vi-n" class="sm" placeholder="ugly, blurry, watermark…"></textarea></div>
+          <div class="fg">
+            <label class="fl">Model</label>
+            <select id="vi-m">
+              <option value="kling-3.0/video">Kling 3.0 (Best)</option>
+              <option value="kling-2.6/text-to-video">Kling 2.6</option>
+              <option value="__c">Custom…</option>
+            </select>
+            <input type="text" id="vi-mc" placeholder="Enter model string" style="display:none;margin-top:6px">
+          </div>
+          <div class="row2">
+            <div class="fg"><label class="fl">Aspect Ratio</label><select id="vi-r"><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option></select></div>
+            <div class="fg"><label class="fl">Duration</label><select id="vi-d"><option value="5">5s</option><option value="10">10s</option><option value="15">15s</option></select></div>
+          </div>
+          <div class="fg"><label class="fl">Mode</label><select id="vi-mode"><option value="std">Standard (720p)</option><option value="pro">Pro (1080p)</option><option value="4K">4K</option></select></div>
+          <div class="fg"><label class="fl">Count</label><select id="vi-c" style="max-width:120px"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="5">5</option></select></div>
+          <div class="cost-prev" id="vi-cp"></div>
+          <button class="gen-btn" id="vi-gen">Generate</button>
+        </div>
+
+        <!-- MOTION CONTROL -->
+        <div id="vs-mc" style="display:none">
+          <div class="info-chip" style="margin-bottom:14px">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Upload a subject image + a motion reference video
+          </div>
+
+          <!-- Two upload slots -->
+          <div class="row2" style="margin-bottom:14px">
+            <div>
+              <label class="fl">Subject Image</label>
+              <div id="mc-img-slot" onclick="document.getElementById('mc-img-fi').click()" style="aspect-ratio:3/4;background:var(--card);border:1.5px dashed var(--border);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;overflow:hidden;transition:border-color .18s">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted2)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <span style="font-size:10px;color:var(--muted2)">Click to upload</span>
+              </div>
+              <input type="file" id="mc-img-fi" accept="image/*" style="display:none">
+            </div>
+            <div>
+              <label class="fl">Motion Video</label>
+              <div id="mc-vid-slot" onclick="document.getElementById('mc-vid-fi').click()" style="aspect-ratio:3/4;background:var(--card);border:1.5px dashed var(--border);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;overflow:hidden;transition:border-color .18s">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted2)" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                <span style="font-size:10px;color:var(--muted2)">Click to upload</span>
+              </div>
+              <input type="file" id="mc-vid-fi" accept="video/*" style="display:none">
+            </div>
+          </div>
+
+          <div class="fg">
+            <label class="fl">Model</label>
+            <select id="mc-m">
+              <option value="kling-3.0/motion-control">Kling 3.0 Motion Control</option>
+              <option value="kling-2.6/motion-control">Kling 2.6 Motion Control</option>
+              <option value="__c">Custom…</option>
+            </select>
+            <input type="text" id="mc-mc" placeholder="Verify model string at docs.kie.ai" style="display:none;margin-top:6px">
+          </div>
+          <div class="row2">
+            <div class="fg"><label class="fl">Mode</label><select id="mc-mode"><option value="720p">Standard (720p)</option><option value="1080p">Pro (1080p)</option></select></div>
+            <div class="fg"><label class="fl">Character From</label><select id="mc-orient"><option value="image">Image (default)</option><option value="video">Video</option></select></div>
+          </div>
+          <div class="cost-prev" id="mc-cp"></div>
+          <div id="mc-status" style="font-size:11px;color:var(--muted2);margin-bottom:10px;min-height:16px"></div>
+          <button class="gen-btn" id="mc-gen">Generate Motion Control</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div id="rpanel">
+      <div class="obar">
+        <span class="obar-title" id="otitle">Output</span>
+        <span class="badge" id="obadge" style="display:none"></span>
+        <div class="osp"></div>
+        <button class="obtn" id="dlall">Download All</button>
+        <button class="obtn dng" id="clrbtn">Clear</button>
+      </div>
+      <div id="empty">
+        <div class="empty-logo">Cuzo</div>
+        <div style="font-size:13px;text-align:center;color:var(--muted)">Ready to generate.<br>Select a model and write a prompt.</div>
+      </div>
+      <div id="ogrid" style="display:none"></div>
+    </div>
+  </div>
+
+  <button id="mfab">+</button>
+</div>
+
+<!-- SETTINGS -->
+<div id="sovlay"></div>
+<div id="spanel">
+  <div class="stitle">Settings <button class="sclose" id="sclbtn">&#215;</button></div>
+  <div class="ssec">
+    <div class="ssec-title">API Keys</div>
+    <div class="fg">
+      <label class="fl">KIE API Key</label>
+      <div class="pw-wrap"><input type="password" id="kie-k" placeholder="Bearer key…"><button class="pw-toggle" data-t="kie-k">&#128065;</button></div>
+      <button class="tbtn" id="tkie">Test KIE Connection</button>
+      <div class="tresult" id="kie-tr"></div>
+    </div>
+    <div class="fg">
+      <label class="fl">Cloudinary Cloud Name <span>(for ref photo uploads)</span></label>
+      <input type="text" id="cld-cloud" placeholder="e.g. dxy1234567" autocomplete="off">
+      <label class="fl" style="margin-top:10px">Cloudinary Upload Preset <span>(must be unsigned)</span></label>
+      <input type="text" id="cld-preset" placeholder="e.g. cuzo_refs" autocomplete="off">
+      <div style="background:#0a0a0a;border:1px solid #1c1c1c;border-radius:8px;padding:10px 12px;font-size:11px;color:#555;margin-top:8px;line-height:1.7">
+        <strong style="color:#888">How to set up (free):</strong><br>
+        1. Go to <strong style="color:#aaa">cloudinary.com</strong> → Sign up free<br>
+        2. Dashboard → Settings → Upload → <strong style="color:#aaa">Add upload preset</strong><br>
+        3. Set signing mode to <strong style="color:#aaa">Unsigned</strong> → Save<br>
+        4. Your Cloud Name is shown on the main dashboard
+      </div>
+      <button class="tbtn" id="timgbb" style="margin-top:8px">Test Cloudinary</button>
+      <div class="tresult" id="imgbb-tr"></div>
+    </div>
+  </div>
+  <div class="ssec">
+    <div class="ssec-title">Security</div>
+    <div class="fg">
+      <label class="fl">Dashboard Password</label>
+      <div class="pw-wrap"><input type="password" id="pw-new" placeholder="New password…"><button class="pw-toggle" data-t="pw-new">&#128065;</button></div>
+      <button class="tbtn" id="savepw">Save Password</button>
+      <div class="tresult" id="pw-tr"></div>
+    </div>
+  </div>
+  <div class="ssec">
+    <div class="ssec-title">Models</div>
+    <div id="model-list"></div>
+    <button class="tbtn" id="add-model-btn" style="width:100%;margin-top:4px;text-align:center">+ Add Model</button>
+    <div class="add-model-form" id="add-model-form">
+      <div class="form-row">
+        <div class="fg" style="margin:0">
+          <label class="fl">Name</label>
+          <input type="text" id="nm-name" placeholder="e.g. Mia" maxlength="20">
+        </div>
+        <div class="fg" style="margin:0">
+          <label class="fl">Niche</label>
+          <input type="text" id="nm-niche" placeholder="e.g. Fitness">
+        </div>
+      </div>
+      <div class="fg" style="margin-bottom:10px">
+        <label class="fl">Color</label>
+        <div class="color-row">
+          <div class="color-preview" id="nm-color-preview" style="background:#ffffff"></div>
+          <input type="color" id="nm-color-picker" value="#ffffff">
+          <button type="button" class="tbtn" style="margin:0" onclick="document.getElementById('nm-color-picker').click()">Pick Color</button>
+          <span id="nm-color-hex" style="font-size:11px;color:var(--muted2)">#ffffff</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button type="button" class="gen-btn" id="nm-save-btn" style="flex:1;padding:9px">Save Model</button>
+        <button type="button" class="tbtn" id="nm-cancel-btn" style="margin:0">Cancel</button>
+      </div>
+      <div class="tresult" id="nm-result"></div>
+    </div>
+  </div>
+
+  <div class="ssec">
+    <div class="ssec-title">Reference Photos</div>
+    <div class="storage-note">
+      <strong>Where are ref photos stored?</strong><br>
+      Locally in this browser's storage (localStorage). They stay saved as long as you don't clear your browser data. They are <strong>not</strong> shared between devices or browsers — each device needs its own uploads.
+    </div>
+    <div id="srefs"></div>
+  </div>
+  <div class="ssec">
+    <div class="ssec-title">Data</div>
+    <button class="dbtn" id="clrhist" style="width:100%;margin-bottom:8px">Clear Generation History</button>
+    <button class="dbtn" id="clrrefall" style="width:100%">Clear All Reference Photos</button>
+  </div>
+</div>
+
+<!-- MODEL IDENTITY PANEL -->
+<div id="id-overlay"></div>
+<div id="id-panel">
+  <div class="id-hero" id="id-hero">
+    <div class="id-hero-empty" id="id-hero-empty">?</div>
+    <div class="id-hero-overlay">
+      <div class="id-hero-name" id="id-name">—</div>
+      <div class="id-hero-niche" id="id-niche">—</div>
+    </div>
+    <div class="id-close" id="id-close">&#215;</div>
+  </div>
+  <div class="id-body">
+    <div class="id-section-title">Reference Photos</div>
+    <div class="id-ref-grid" id="id-ref-grid"></div>
+
+    <div class="id-section-title">Physical Description</div>
+    <textarea class="id-notes" id="id-notes" placeholder="e.g. 26 y/o, long dark hair, olive skin, hazel eyes, slim athletic build, small tattoo on left wrist…" rows="4"></textarea>
+
+    <div class="id-section-title" style="display:flex;align-items:center;justify-content:space-between">
+      Always Include in Prompts
+      <span style="color:#333;font-size:9px;font-weight:400;letter-spacing:0;text-transform:none">auto-appended to every generation</span>
+    </div>
+    <textarea class="id-always" id="id-always" placeholder="e.g. young woman, long dark hair, olive skin, hazel eyes, photorealistic, 8k" rows="3"></textarea>
+    <div class="id-always-note">This text is silently added to the end of every prompt when this model is selected — use it to lock in physical traits for consistency.</div>
+
+    <div style="margin-top:20px;display:flex;gap:8px">
+      <button type="button" class="gen-btn" id="id-save-btn" style="flex:1;padding:10px">Save Identity</button>
+      <button type="button" class="tbtn" id="id-upload-btn" style="margin:0">+ Add Ref Photos</button>
+      <input type="file" id="id-fi" accept="image/*" multiple style="display:none">
+    </div>
+    <div class="tresult" id="id-result" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<!-- HISTORY -->
+<div id="hpanel">
+  <div class="hheader">
+    <div class="htitle">Generation History</div>
+    <button class="hclose" id="hclbtn">Close</button>
+  </div>
+  <div class="hsearch"><input type="text" id="hsearch" placeholder="Search prompts…" style="max-width:400px"></div>
+  <div class="hfilters" id="hfils"></div>
+  <div id="hgrid"></div>
+</div>
+
+<!-- VIEWER -->
+<div id="viewer">
+  <button class="vclose" id="vclbtn">&#215;</button>
+  <img id="vimg" style="display:none">
+  <video id="vvid" style="display:none" controls autoplay loop></video>
+  <div id="vprompt" style="color:var(--muted2);font-size:12px;max-width:600px;text-align:center;padding:0 16px"></div>
+</div>
+
+<script>
+// ── MODELS (dynamic, stored in localStorage) ──
+const DEFAULT_MODELS = [
+  { id:'kim',   name:'Kim',   color:'#22C55E', niche:'Lifestyle & Fitness' },
+  { id:'ruby',  name:'Ruby',  color:'#F97316', niche:'Glam & Fashion'      },
+  { id:'luna',  name:'Luna',  color:'#A855F7', niche:'Beauty & Aesthetics' },
+  { id:'aiko',  name:'Aiko',  color:'#EC4899', niche:'Cute & Playful'      },
+  { id:'suly',  name:'Suly',  color:'#06B6D4', niche:'Exotic & Mysterious' },
+  { id:'lyssa', name:'Lyssa', color:'#EF4444', niche:'Bold & Edgy'         },
+];
+let MODELS = loadModels();
+function loadModels() {
+  try {
+    const saved = localStorage.getItem('cuzo_models');
+    if (saved) return JSON.parse(saved);
+  } catch(_) {}
+  return JSON.parse(JSON.stringify(DEFAULT_MODELS));
+}
+function saveModels() {
+  localStorage.setItem('cuzo_models', JSON.stringify(MODELS));
+}
+
+// ── COST ESTIMATES ──
+const COSTS = {
+  'seedream/4.5-edit':                  0.06,
+  'seedream/4.5-text-to-image':         0.05,
+  'bytedance/seedream-v4-text-to-image': 0.04,
+  'bytedance/seedream':                  0.02,
+  'nano-banana-pro':                    0.08,
+  'kling-3.0/video':                    0.35,
+  'kling-2.6/text-to-video':            0.25,
+  'kling-3.0/motion-control':           0.50,
+  'kling-2.6/motion-control':           0.35,
+};
+
+// ── STATE ──
+let activeModel = 'kim';
+let activeTab = 'images';
+let activeSub = 'sd';
+let multiMode = false;
+let selectedModels = new Set(['kim']);
+let items = [];
+let corsShown = false;
+let hModelFil = 'all', hTypeFil = 'all';
+
+const KIE = 'https://api.kie.ai/api/v1/jobs';
+const $ = id => document.getElementById(id);
+const delay = ms => new Promise(r => setTimeout(r, ms));
+const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+const f$ = n => '$' + n.toFixed(2);
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const getKie = () => localStorage.getItem('cuzo_kie_key') || '';
+const getCldCloud  = () => localStorage.getItem('cuzo_cld_cloud') || '';
+const getCldPreset = () => localStorage.getItem('cuzo_cld_preset') || '';
+const getCldReady  = () => !!(getCldCloud() && getCldPreset());
+const getPw  = () => localStorage.getItem('cuzo_password') || 'Cuzo.123';
+
+function ratCls(r) {
+  return {' 9:16':'', ' 3:4':' r34', ' 1:1':' r11', ' 16:9':' r169', ' 4:3':' r169', ' 21:9':' r169'}[' '+r] || '';
+}
+
+// ── GATE ──
+function tryGate() {
+  const v = document.getElementById('gi').value;
+  const correct = localStorage.getItem('cuzo_password') || 'Cuzo.123';
+  if (v === correct) {
+    sessionStorage.setItem('cuzo_auth','1');
+    document.getElementById('gate').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    initApp();
+  } else {
+    const inp = document.getElementById('gi');
+    const err = document.getElementById('gerr');
+    inp.classList.add('error');
+    err.textContent = 'Incorrect password.';
+    setTimeout(() => inp.classList.remove('error'), 600);
+  }
+}
+
+function initGate() {
+  if (sessionStorage.getItem('cuzo_auth') === '1') {
+    document.getElementById('gate').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    initApp();
+  }
+}
+
+// ── APP INIT ──
+function initApp() {
+  buildModelBar();
+  loadSettingsInputs();
+  updateCostDisplay();
+  updateCostPreviews();
+  bindAll();
+  buildSettingsRefs();
+  renderGrid();
+  updateApiDot();
+  // Set initial ref note for Seedream (Edit model is default)
+  const isEdit=$('sd-m')&&$('sd-m').value==='seedream/4.5-edit';
+  if($('sd-ref-note')){$('sd-ref-note').textContent=isEdit?'✓ sent to API as reference':'(select Edit model to use)';$('sd-ref-note').style.color=isEdit?'var(--success)':'var(--muted2)';}
+}
+
+// ── MODEL BAR ──
+function buildModelBar() {
+  const c = $('mchips');
+  c.innerHTML = '';
+  MODELS.forEach(m => {
+    const el = document.createElement('div');
+    el.className = 'model-chip' + (m.id === activeModel ? ' active' : '');
+    el.dataset.id = m.id;
+    el.innerHTML = `<div class="mdot" style="background:${m.color}"></div>${m.name}<button class="id-chip-btn" title="View identity"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></button><div class="mcheck">&#10003;</div>`;
+    if (m.id === activeModel) { el.style.borderColor = m.color; el.style.color = m.color; }
+    el.addEventListener('click', () => onChipClick(m.id, el));
+    el.querySelector('.id-chip-btn').addEventListener('click', e => { e.stopPropagation(); openIdentityPanel(m.id); });
+    c.appendChild(el);
+  });
+}
+
+function onChipClick(id, el) {
+  if (multiMode) {
+    if (selectedModels.has(id)) { selectedModels.delete(id); el.classList.remove('msel'); }
+    else { selectedModels.add(id); el.classList.add('msel'); }
+    updateMultiBtns();
+    return;
+  }
+  activeModel = id;
+  document.querySelectorAll('.model-chip').forEach(c => {
+    const m = MODELS.find(x => x.id === c.dataset.id);
+    c.classList.remove('active'); c.style.borderColor=''; c.style.color='';
+  });
+  el.classList.add('active');
+  const m = MODELS.find(x => x.id === id);
+  el.style.borderColor = m.color; el.style.color = m.color;
+  refreshRefGrids();
+}
+
+function updateMultiBtns() {
+  const n = selectedModels.size;
+  const defaultLabels = {'sd-gen':'Generate','nb-gen':'Generate','vi-gen':'Generate','mc-gen':'Generate Motion Control'};
+  ['sd-gen','nb-gen','vi-gen','mc-gen'].forEach(bid => {
+    const b = $(bid); if(!b) return;
+    if (multiMode && n > 1) { b.textContent=`Generate for ${n} Models`; b.classList.add('multi'); }
+    else { b.textContent=defaultLabels[bid]||'Generate'; b.classList.remove('multi'); }
+  });
+}
+
+// ── SETTINGS STORAGE ──
+function loadSettingsInputs() {
+  $('kie-k').value = localStorage.getItem('cuzo_kie_key') || '';
+  $('cld-cloud').value  = localStorage.getItem('cuzo_cld_cloud') || '';
+  $('cld-preset').value = localStorage.getItem('cuzo_cld_preset') || '';
+}
+function saveKie() { const v=$('kie-k').value.trim(); if(v) localStorage.setItem('cuzo_kie_key',v); updateApiDot(); }
+function saveCld() {
+  const cloud=$('cld-cloud').value.trim(), preset=$('cld-preset').value.trim();
+  if(cloud)  localStorage.setItem('cuzo_cld_cloud', cloud);
+  if(preset) localStorage.setItem('cuzo_cld_preset', preset);
+}
+
+// ── BIND ALL ──
+function bindAll() {
+  // Tabs
+  document.querySelectorAll('.ptab').forEach(t => t.addEventListener('click', () => {
+    activeTab = t.dataset.t;
+    document.querySelectorAll('.ptab').forEach(x=>x.classList.remove('active')); t.classList.add('active');
+    $('timages').style.display = activeTab==='images'?'':'none';
+    $('tvideo').style.display  = activeTab==='video'?'':'none';
+    updateCostPreviews();
+  }));
+
+  // Image sub tabs (Seedream / NanoBanana)
+  document.querySelectorAll('.stab[data-s]').forEach(t => t.addEventListener('click', () => {
+    activeSub = t.dataset.s;
+    document.querySelectorAll('.stab[data-s]').forEach(x=>x.classList.remove('active')); t.classList.add('active');
+    $('ssd').style.display = activeSub==='sd'?'':'none';
+    $('snb').style.display = activeSub==='nb'?'':'none';
+    refreshRefGrids(); updateCostPreviews();
+  }));
+
+  // Video sub tabs (Text to Video / Motion Control)
+  let activeVidSub = 'txt';
+  document.querySelectorAll('.stab[data-vs]').forEach(t => t.addEventListener('click', () => {
+    activeVidSub = t.dataset.vs;
+    document.querySelectorAll('.stab[data-vs]').forEach(x=>x.classList.remove('active')); t.classList.add('active');
+    $('vs-txt').style.display = activeVidSub==='txt'?'':'none';
+    $('vs-mc').style.display  = activeVidSub==='mc'?'':'none';
+    updateCostPreviews();
+  }));
+
+  // Custom model toggles
+  $('sd-m').addEventListener('change', () => {
+    $('sd-mc').style.display=$('sd-m').value==='__c'?'':'none';
+    const isEdit=$('sd-m').value==='seedream/4.5-edit';
+    $('sd-ref-note').textContent=isEdit?'✓ sent to API as reference':'(select Edit model to use)';
+    $('sd-ref-note').style.color=isEdit?'var(--success)':'var(--muted2)';
+    updateCostPreviews();
+  });
+  $('vi-m').addEventListener('change', () => { $('vi-mc').style.display=$('vi-m').value==='__c'?'':'none'; updateCostPreviews(); });
+  $('mc-m').addEventListener('change', () => { $('mc-mc').style.display=$('mc-m').value==='__c'?'':'none'; updateCostPreviews(); });
+
+  // Cost preview triggers
+  ['sd-c','sd-m','sd-q'].forEach(id => $(id)&&$(id).addEventListener('change',updateCostPreviews));
+  ['nb-c','nb-res'].forEach(id => $(id)&&$(id).addEventListener('change',updateCostPreviews));
+  ['vi-c','vi-m','vi-d'].forEach(id => $(id)&&$(id).addEventListener('change',updateCostPreviews));
+
+  // Motion control file slots
+  $('vi-sf-fi').addEventListener('change', e => handleViStartFrameUpload(e));
+  $('vi-ef-fi').addEventListener('change', e => handleViEndFrameUpload(e));
+  $('vi-multishot').addEventListener('change', syncMultiShotToggle);
+  $('mc-img-fi').addEventListener('change', e => handleMcImageUpload(e));
+  $('mc-vid-fi').addEventListener('change', e => handleMcVideoUpload(e));
+
+  // Generate buttons
+  $('sd-gen').addEventListener('click', () => handleGen('sd'));
+  $('nb-gen').addEventListener('click', () => handleGen('nb'));
+  $('vi-gen').addEventListener('click', () => handleGen('vi'));
+  $('mc-gen').addEventListener('click', () => handleGen('mc'));
+
+  // Cmd/Ctrl+Enter
+  ['sd-p','nb-p','vi-p'].forEach(id => {
+    const el = $(id); if(!el) return;
+    el.addEventListener('keydown', e => {
+      if ((e.metaKey||e.ctrlKey) && e.key==='Enter') {
+        e.preventDefault();
+        if(activeTab==='images'&&activeSub==='sd') handleGen('sd');
+        else if(activeTab==='images'&&activeSub==='nb') handleGen('nb');
+        else if(activeTab==='video') handleGen('vi');
+      }
+    });
+  });
+
+  // Seedream refs
+  $('sd-up').addEventListener('click', () => $('sd-fi').click());
+  $('sd-fi').addEventListener('change', handleRefUpload);
+
+  // NanoBanana refs
+  $('nb-up').addEventListener('click', () => $('nb-fi').click());
+  $('nb-fi').addEventListener('change', handleRefUpload);
+
+  // Multi mode
+  $('multibtn').addEventListener('click', toggleMulti);
+
+  // Identity panel
+  $('id-close').addEventListener('click', closeIdentityPanel);
+  $('id-overlay').addEventListener('click', closeIdentityPanel);
+  $('id-save-btn').addEventListener('click', saveIdentityPanel);
+  $('id-upload-btn').addEventListener('click', () => $('id-fi').click());
+  $('id-fi').addEventListener('change', handleIdRefUpload);
+  bindIdentityAutoSave();
+
+  // Model manager
+  $('add-model-btn').addEventListener('click', openAddModelForm);
+  $('nm-cancel-btn').addEventListener('click', closeAddModelForm);
+  $('nm-save-btn').addEventListener('click', saveNewModel);
+  $('nm-color-picker').addEventListener('input', e => {
+    $('nm-color-preview').style.background = e.target.value;
+    $('nm-color-hex').textContent = e.target.value;
+  });
+
+  // Settings
+  $('sbtn').addEventListener('click', openSettings);
+  $('sclbtn').addEventListener('click', closeSettings);
+  $('sovlay').addEventListener('click', closeSettings);
+  $('kie-k').addEventListener('input', saveKie);
+  $('cld-cloud').addEventListener('input', saveCld);
+  $('cld-preset').addEventListener('input', saveCld);
+  $('tkie').addEventListener('click', testKie);
+  $('timgbb').addEventListener('click', testIbb);
+  $('savepw').addEventListener('click', () => {
+    const v=$('pw-new').value.trim();
+    if(!v||v.length<4){$('pw-tr').className='tresult err';$('pw-tr').textContent='Too short.';return;}
+    localStorage.setItem('cuzo_password',v);
+    $('pw-tr').className='tresult ok';$('pw-tr').textContent='Password saved.';$('pw-new').value='';
+  });
+  $('clrhist').addEventListener('click', () => {
+    if(confirm('Clear all history?')){localStorage.removeItem('cuzo_history');updateCostDisplay();}
+  });
+  $('clrrefall').addEventListener('click', () => {
+    if(confirm('Clear all reference photos?')){
+      MODELS.forEach(m=>{localStorage.removeItem('cuzo_refs_'+m.id);localStorage.removeItem('cuzo_ref_urls_'+m.id);});
+      refreshNbRefs(); buildSettingsRefs();
+    }
+  });
+
+  // PW toggles
+  document.querySelectorAll('.pw-toggle').forEach(b => b.addEventListener('click', () => {
+    const i=$(b.dataset.t); i.type=i.type==='password'?'text':'password';
+  }));
+
+  // History
+  $('hbtn').addEventListener('click', openHistory);
+  $('hclbtn').addEventListener('click', closeHistory);
+  $('hsearch').addEventListener('input', renderHistory);
+
+  // Output bar
+  $('dlall').addEventListener('click', dlAll);
+  $('clrbtn').addEventListener('click', clrOutput);
+
+  // Viewer
+  $('vclbtn').addEventListener('click', closeViewer);
+  $('viewer').addEventListener('click', e => { if(e.target===$('viewer')) closeViewer(); });
+
+  // Mobile FAB
+  $('mfab').addEventListener('click', () => $('lpanel').classList.toggle('open'));
+}
+
+// ── MULTI MODE ──
+function toggleMulti() {
+  multiMode = !multiMode;
+  document.body.classList.toggle('multi-mode', multiMode);
+  $('multibtn').classList.toggle('active', multiMode);
+  if (multiMode) {
+    selectedModels = new Set([activeModel]);
+    document.querySelectorAll('.model-chip').forEach(c => c.classList.toggle('msel', c.dataset.id===activeModel));
+  } else { selectedModels.clear(); }
+  updateMultiBtns();
+}
+
+// ── KIE API ──
+async function kieCreate(model, input) {
+  const key = getKie();
+  const r = await fetch(KIE+'/createTask', {
+    method:'POST',
+    headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+    body:JSON.stringify({model,input})
+  });
+  const d = await r.json();
+  if(d.code!==200) throw new Error(d.msg||'KIE error '+r.status);
+  return d.data.taskId;
+}
+
+async function kiePoll(taskId) {
+  const r = await fetch(KIE+'/recordInfo?taskId='+encodeURIComponent(taskId), {
+    headers:{'Authorization':'Bearer '+getKie()}
+  });
+  const d = await r.json();
+  if(d.data?.resultJson && typeof d.data.resultJson==='string') {
+    try { d.data.result = JSON.parse(d.data.resultJson); } catch(_){}
+  }
+  return d;
+}
+
+async function pollLoop(taskId, onOk, onFail, maxP=110) {
+  for(let i=0;i<maxP;i++) {
+    await delay(8000);
+    try {
+      const d = await kiePoll(taskId);
+      const st = d.data?.state;
+      if(st==='success') {
+        const res = d.data?.result || {};
+        const urls = res.resultUrls || res.videos?.map(v=>v.url) || (res.url?[res.url]:[]);
+        if(urls&&urls[0]){onOk(urls);return;}
+      }
+      if(st==='fail'){onFail('Generation failed');return;}
+    } catch(e) {
+      if(e.name==='TypeError'||(e.message&&e.message.includes('Failed to fetch'))){showCors();onFail('CORS error — see banner');return;}
+    }
+  }
+  onFail('Timed out (~15 min)');
+}
+
+function showCors() {
+  if(corsShown) return; corsShown=true;
+  $('cors-banner').classList.add('show');
+}
+
+// ── CLOUDINARY UPLOAD ──
+async function uploadCld(b64, name) {
+  const cloud = getCldCloud(), preset = getCldPreset();
+  if(!cloud||!preset) throw new Error('Cloudinary cloud name and upload preset required — add in Settings');
+  const form = new FormData();
+  form.append('file', b64);
+  if(name) form.append('public_id', name);
+  form.append('upload_preset', preset);
+  const r = await fetch(`https://api.cloudinary.com/v1_1/${cloud}/image/upload`, {method:'POST',body:form});
+  const d = await r.json();
+  if(d.error) throw new Error(d.error.message||'Cloudinary upload failed');
+  return d.secure_url;
+}
+
+async function uploadCldVideo(file, name) {
+  const cloud = getCldCloud(), preset = getCldPreset();
+  if(!cloud||!preset) throw new Error('Cloudinary cloud name and upload preset required — add in Settings');
+  const form = new FormData();
+  form.append('file', file);
+  if(name) form.append('public_id', name);
+  form.append('upload_preset', preset);
+  const r = await fetch(`https://api.cloudinary.com/v1_1/${cloud}/video/upload`, {method:'POST',body:form});
+  const d = await r.json();
+  if(d.error) throw new Error(d.error.message||'Cloudinary video upload failed');
+  return d.secure_url;
+}
+
+async function getRefUrls(modelId) {
+  const refs = JSON.parse(localStorage.getItem('cuzo_refs_'+modelId)||'[]');
+  if(!refs.length) return [];
+  const cached = JSON.parse(localStorage.getItem('cuzo_ref_urls_'+modelId)||'[]');
+  if(cached.length===refs.length) return cached;
+  if(!getCldReady()) throw new Error('Cloudinary cloud name and upload preset required — add in Settings');
+  const urls = [];
+  for(let i=0;i<refs.length;i++) {
+    if(cached[i]){urls.push(cached[i]);continue;}
+    const u = await uploadCld(refs[i], modelId+'_ref_'+i+'_'+Date.now());
+    urls.push(u); await delay(300);
+  }
+  localStorage.setItem('cuzo_ref_urls_'+modelId, JSON.stringify(urls));
+  return urls;
+}
+
+// ── REFS ──
+function getRefs(mid) { return JSON.parse(localStorage.getItem('cuzo_refs_'+mid)||'[]'); }
+function saveRefs(mid, refs) { localStorage.setItem('cuzo_refs_'+mid, JSON.stringify(refs)); localStorage.removeItem('cuzo_ref_urls_'+mid); }
+
+function refreshRefGrids() {
+  const refs = getRefs(activeModel);
+  const noKey = refs.length > 0 && !getCldReady();
+
+  // Seedream refs grid
+  const sdg = $('sd-rg');
+  if (sdg) {
+    sdg.innerHTML = '';
+    refs.forEach((b64,i) => {
+      const w = document.createElement('div'); w.className='rthumb-wrap';
+      w.innerHTML=`<img src="${b64}" class="rthumb"><div class="rdel">&#215;</div>`;
+      w.querySelector('.rdel').addEventListener('click',()=>{deleteRef(activeModel,i);});
+      sdg.appendChild(w);
+    });
+    $('sd-rc').textContent=`(${refs.length}/8)`;
+    $('sd-rw').style.display='none'; // Seedream refs are visual-only, no upload needed
+  }
+
+  // NanoBanana refs grid
+  const nbg = $('nb-rg');
+  if (nbg) {
+    nbg.innerHTML = '';
+    refs.forEach((b64,i) => {
+      const w = document.createElement('div'); w.className='rthumb-wrap';
+      w.innerHTML=`<img src="${b64}" class="rthumb"><div class="rdel">&#215;</div>`;
+      w.querySelector('.rdel').addEventListener('click',()=>{deleteRef(activeModel,i);});
+      nbg.appendChild(w);
+    });
+    $('nb-rc').textContent=`(${refs.length}/8)`;
+    $('nb-rw').style.display=noKey?'':'none';
+  }
+}
+
+// keep old name as alias so existing calls still work
+function refreshNbRefs() { refreshRefGrids(); }
+
+function deleteRef(mid,idx) {
+  const refs=getRefs(mid); refs.splice(idx,1); saveRefs(mid,refs);
+  refreshRefGrids(); buildSettingsRefs();
+}
+
+async function handleRefUpload(e) {
+  const files=Array.from(e.target.files);
+  const refs=getRefs(activeModel);
+  const toAdd=files.slice(0,8-refs.length);
+  for(const f of toAdd) {
+    const b64 = await compressImage(f, 1200, 0.88);
+    refs.push(b64);
+  }
+  saveRefs(activeModel,refs); refreshRefGrids(); buildSettingsRefs();
+  e.target.value='';
+}
+
+// Resize + compress any image to fit within maxPx, output as JPEG
+function compressImage(file, maxPx, quality) {
+  return new Promise((res, rej) => {
+    const reader = new FileReader();
+    reader.onerror = rej;
+    reader.onload = ev => {
+      const img = new Image();
+      img.onerror = rej;
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w > maxPx || h > maxPx) {
+          if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+          else { w = Math.round(w * maxPx / h); h = maxPx; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        res(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function buildSettingsRefs() {
+  const c=$('srefs'); c.innerHTML='';
+  MODELS.forEach(m => {
+    const refs=getRefs(m.id);
+    const d=document.createElement('div'); d.className='sref';
+    d.innerHTML=`<div class="sref-title"><div style="width:8px;height:8px;border-radius:50%;background:${m.color}"></div>${m.name} <span style="color:var(--muted2);font-weight:400">(${refs.length}/8)</span></div><div class="refs-grid" id="srg-${m.id}"></div>`;
+    c.appendChild(d);
+    const g=d.querySelector('#srg-'+m.id);
+    refs.forEach((b64,i)=>{
+      const w=document.createElement('div');w.className='rthumb-wrap';
+      w.innerHTML=`<img src="${b64}" class="rthumb"><div class="rdel">&#215;</div>`;
+      w.querySelector('.rdel').addEventListener('click',()=>{deleteRef(m.id,i);buildSettingsRefs();});
+      g.appendChild(w);
+    });
+  });
+}
+
+// ── COST ──
+function getCost(model) { return COSTS[model]||0.05; }
+function updateCostPreviews() {
+  const sdm=$('sd-m').value==='__c'?($('sd-mc').value||'seedream/4.5-text-to-image'):$('sd-m').value;
+  const sdc=parseInt($('sd-c').value)||4;
+  $('sd-cp').innerHTML=`Est. cost: <strong>~${f$(getCost(sdm)*sdc)}</strong> for ${sdc} image${sdc>1?'s':''}`;
+
+  const nbc=parseInt($('nb-c').value)||4;
+  $('nb-cp').innerHTML=`Est. cost: <strong>~${f$(getCost('nano-banana-pro')*nbc)}</strong> for ${nbc} image${nbc>1?'s':''}`;
+
+  const vim=$('vi-m').value==='__c'?($('vi-mc').value||'kling-3.0/video'):$('vi-m').value;
+  const vic=parseInt($('vi-c').value)||3;
+  $('vi-cp').innerHTML=`Est. cost: <strong>~${f$(getCost(vim)*vic)}</strong> for ${vic} video${vic>1?'s':''}`;
+
+  const mcm=$('mc-m').value==='__c'?($('mc-mc').value||'kling-3.0/motion-control'):$('mc-m').value;
+  if($('mc-cp')) $('mc-cp').innerHTML=`Est. cost: <strong>~${f$(getCost(mcm))}</strong> per generation`;
+}
+
+function updateCostDisplay() {
+  const hist=JSON.parse(localStorage.getItem('cuzo_history')||'[]');
+  const today=new Date().toDateString();
+  const sum=hist.filter(h=>new Date(h.timestamp).toDateString()===today).reduce((s,h)=>s+(h.estimatedCost||0),0);
+  $('today-cost').textContent='~'+f$(sum);
+}
+
+function saveHist(item) {
+  let h=JSON.parse(localStorage.getItem('cuzo_history')||'[]');
+  h.unshift(item); if(h.length>200) h=h.slice(0,200);
+  localStorage.setItem('cuzo_history',JSON.stringify(h));
+  updateCostDisplay();
+}
+
+// ── GENERATION ──
+async function handleGen(type) {
+  if(!getKie()){alert('KIE API key not set. Open Settings.');return;}
+  const mods = multiMode&&selectedModels.size>0 ? Array.from(selectedModels) : [activeModel];
+  for(let i=0;i<mods.length;i++) {
+    if(i>0) await delay(1200);
+    await genForModel(type, mods[i]);
+  }
+}
+
+async function genForModel(type, mid) {
+  if(type==='sd') await genSd(mid);
+  else if(type==='nb') await genNb(mid);
+  else if(type==='mc') await genMc(mid);
+  else await genVi(mid);
+}
+
+// ── TEXT TO VIDEO FRAMES ──
+let viStartFrameB64 = null;
+let viEndFrameB64 = null;
+
+const FRAME_EMPTY_HTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted2)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><span style="font-size:9px;color:var(--muted2)">Upload</span>`;
+
+function handleViStartFrameUpload(e) {
+  const f = e.target.files[0]; if(!f) return;
+  compressImage(f, 1200, 0.9).then(b64 => {
+    viStartFrameB64 = b64;
+    const slot = $('vi-sf-slot');
+    slot.innerHTML = `<img src="${b64}" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`;
+    slot.style.border = '1.5px solid var(--border)';
+    $('vi-sf-clr').style.display = '';
+  });
+  e.target.value = '';
+}
+
+function clearViStartFrame() {
+  viStartFrameB64 = null;
+  $('vi-sf-slot').innerHTML = FRAME_EMPTY_HTML;
+  $('vi-sf-slot').style.border = '1.5px dashed var(--border)';
+  $('vi-sf-clr').style.display = 'none';
+}
+
+function handleViEndFrameUpload(e) {
+  const f = e.target.files[0]; if(!f) return;
+  compressImage(f, 1200, 0.9).then(b64 => {
+    viEndFrameB64 = b64;
+    const slot = $('vi-ef-slot');
+    slot.innerHTML = `<img src="${b64}" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`;
+    slot.style.border = '1.5px solid var(--border)';
+    $('vi-ef-clr').style.display = '';
+  });
+  e.target.value = '';
+}
+
+function clearViEndFrame() {
+  viEndFrameB64 = null;
+  $('vi-ef-slot').innerHTML = FRAME_EMPTY_HTML;
+  $('vi-ef-slot').style.border = '1.5px dashed var(--border)';
+  $('vi-ef-clr').style.display = 'none';
+}
+
+// toggle visual sync
+function syncMultiShotToggle() {
+  const checked = $('vi-multishot').checked;
+  $('vi-ms-track').classList.toggle('vi-toggle-on', checked);
+}
+
+// ── MOTION CONTROL STATE ──
+let mcImageB64 = null;   // compressed base64 of subject image
+let mcVideoFile = null;  // raw video File object
+let mcVideoUrl = null;   // hosted URL after upload (not used — we pass URL directly or warn)
+
+function handleMcImageUpload(e) {
+  const f = e.target.files[0]; if(!f) return;
+  compressImage(f, 1200, 0.9).then(b64 => {
+    mcImageB64 = b64;
+    const slot = $('mc-img-slot');
+    slot.innerHTML = `<img src="${b64}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">`;
+    slot.style.border = '1.5px solid var(--border)';
+  });
+  e.target.value='';
+}
+
+function handleMcVideoUpload(e) {
+  const f = e.target.files[0]; if(!f) return;
+  mcVideoFile = f;
+  const url = URL.createObjectURL(f);
+  const slot = $('mc-vid-slot');
+  slot.innerHTML = `<video src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:8px" autoplay loop muted playsinline></video>`;
+  slot.style.border = '1.5px solid var(--border)';
+  e.target.value='';
+}
+
+async function genMc(mid) {
+  if(!mcImageB64){alert('Upload a subject image first.');return;}
+  if(!mcVideoFile){alert('Upload a motion reference video first.');return;}
+  if(!getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings.');return;}
+
+  const model = $('mc-m').value==='__c' ? $('mc-mc').value.trim() : $('mc-m').value;
+  if(!model){alert('Enter a model string.');return;}
+  const orient=$('mc-orient').value;
+  // Kling 3.0 MC uses "std"/"pro"; Kling 2.6 MC uses "720p"/"1080p"
+  const rawMode=$('mc-mode').value;
+  const mode = model==='kling-3.0/motion-control'
+    ? (rawMode==='720p'?'std':'pro')
+    : rawMode;
+  const cost = getCost(model);
+
+  const btn=$('mc-gen'); btn.disabled=true;
+  $('mc-status').textContent='';
+
+  // Upload subject image
+  let imageUrl;
+  try {
+    btn.innerHTML='<div class="spinner"></div>Uploading image…';
+    imageUrl = await uploadCld(mcImageB64, 'mc_subject_'+Date.now());
+  } catch(e) {
+    btn.disabled=false; btn.textContent='Generate Motion Control';
+    alert('Image upload failed: '+e.message); return;
+  }
+
+  // Upload motion video to Cloudinary
+  let videoUrl;
+  try {
+    btn.innerHTML='<div class="spinner"></div>Uploading video…';
+    videoUrl = await uploadCldVideo(mcVideoFile, 'mc_video_'+Date.now());
+  } catch(e) {
+    btn.disabled=false; btn.textContent='Generate Motion Control';
+    alert('Video upload failed: '+e.message); return;
+  }
+
+  btn.innerHTML='<div class="spinner"></div>Submitting…';
+
+  // KIE Motion Control API: input_urls (image array) + video_urls (video array)
+  const input = {
+    input_urls: [imageUrl],
+    video_urls: [videoUrl],
+    mode: mode,
+    character_orientation: orient,
+  };
+
+  const cid=uid();
+  addPend(cid, mid, 'video', 'Motion Control', 'Motion Control', '9:16');
+
+  try {
+    const tid = await kieCreate(model, input);
+    updateApiDot('ok');
+    pollLoop(tid,
+      urls => { succCard(cid,mid,'video',urls[0],'Motion Control',model,cost); saveHist({id:cid,modelId:mid,type:'video',prompt:'Motion Control',url:urls[0],model,timestamp:Date.now(),estimatedCost:cost}); },
+      err  => failCard(cid, err)
+    );
+  } catch(e) {
+    if(e.name==='TypeError'||(e.message&&e.message.includes('Failed to fetch'))) showCors();
+    failCard(cid, e.message||'Submit failed');
+  }
+
+  btn.disabled=false; btn.textContent='Generate Motion Control';
+}
+
+async function genSd(mid) {
+  const prompt=withIdentity($('sd-p').value.trim(), mid); if(!prompt){alert('Enter a prompt.');return;}
+  const model=$('sd-m').value==='__c'?$('sd-mc').value.trim():$('sd-m').value;
+  if(!model){alert('Enter a model string.');return;}
+  const cnt=parseInt($('sd-c').value), ratio=$('sd-r').value, quality=$('sd-q').value, fmt=$('sd-f').value, neg=$('sd-n').value.trim();
+  const cost=getCost(model);
+
+  const btn=$('sd-gen'); btn.disabled=true;
+
+  // Build input based on model — each Seedream version has different accepted params
+  let input;
+  if(model==='seedream/4.5-edit') {
+    // Edit model: supports reference images via image_urls
+    if(!getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings to use reference photos.');btn.disabled=false;btn.textContent='Generate';return;}
+    let refUrls=[];
+    const refs=getRefs(mid);
+    if(refs.length>0){
+      try{
+        btn.innerHTML='<div class="spinner"></div>Uploading refs…';
+        refUrls=await getRefUrls(mid);
+      } catch(e){alert('Ref upload failed: '+e.message);btn.disabled=false;btn.textContent='Generate';return;}
+    }
+    input={prompt,aspect_ratio:ratio,quality,nsfw_checker:false};
+    if(refUrls.length) input.image_urls=refUrls;
+  } else if(model==='seedream/4.5-text-to-image') {
+    // 4.5: aspect_ratio + quality (basic/high) + nsfw_checker only
+    input={prompt,aspect_ratio:ratio,quality,nsfw_checker:false};
+  } else if(model==='bytedance/seedream-v4-text-to-image') {
+    // 4.0: image_size + image_resolution + max_images
+    const sizeMap={'9:16':'portrait_16_9','16:9':'landscape_16_9','1:1':'square_hd','3:4':'portrait_4_3','4:3':'landscape_4_3'};
+    input={prompt,image_size:sizeMap[ratio]||'portrait_16_9',image_resolution:'2K',max_images:cnt,nsfw_checker:false};
+  } else {
+    // 3.0: image_size + guidance_scale
+    const sizeMap={'9:16':'portrait_16_9','16:9':'landscape_16_9','1:1':'square_hd','3:4':'portrait_4_3','4:3':'landscape_4_3'};
+    input={prompt,image_size:sizeMap[ratio]||'portrait_16_9'};
+  }
+
+  btn.innerHTML='<div class="spinner"></div>Submitting…';
+  // For 4.0/3.0 we generate all in one call (max_images handles count)
+  const batchMode = (model==='bytedance/seedream-v4-text-to-image'||model==='bytedance/seedream');
+  const loopCount = batchMode ? 1 : cnt;
+
+  for(let i=0;i<loopCount;i++) {
+    if(i>0) await delay(1100);
+    const cid=uid(); addPend(cid,mid,'image',prompt,'Image '+(i+1)+'/'+cnt,ratio);
+    kieCreate(model,input).then(tid => {
+      updateApiDot('ok');
+      pollLoop(tid, urls=>{ succCard(cid,mid,'image',urls[0],prompt,model,cost); saveHist({id:cid,modelId:mid,type:'image',prompt,url:urls[0],model,timestamp:Date.now(),estimatedCost:cost}); }, err=>failCard(cid,err));
+    }).catch(e=>{ if(e.name==='TypeError'||(e.message&&e.message.includes('Failed to fetch'))) showCors(); failCard(cid,e.message||'Submit failed'); });
+  }
+  btn.disabled=false; btn.textContent='Generate';
+}
+
+async function genNb(mid) {
+  const prompt=withIdentity($('nb-p').value.trim(), mid); if(!prompt){alert('Enter a prompt.');return;}
+  const cnt=parseInt($('nb-c').value), ratio=$('nb-r').value, res=$('nb-res').value, fmt=$('nb-f').value;
+  const cost=getCost('nano-banana-pro');
+  const refs=getRefs(mid);
+  let refUrls=[];
+  if(refs.length>0) {
+    if(!getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings.');return;}
+    const btn=$('nb-gen'); btn.disabled=true; btn.innerHTML='<div class="spinner"></div>Uploading refs…';
+    try { refUrls=await getRefUrls(mid); } catch(e){alert('Ref upload failed: '+e.message);btn.disabled=false;btn.textContent='Generate';return;}
+    btn.disabled=false; btn.textContent='Generate';
+  }
+  const btn=$('nb-gen'); btn.disabled=true; btn.innerHTML='<div class="spinner"></div>Submitting…';
+  const input={prompt,aspect_ratio:ratio,resolution:res,output_format:fmt};
+  if(refUrls.length) input.image_input=refUrls;
+  for(let i=0;i<cnt;i++) {
+    if(i>0) await delay(1100);
+    const cid=uid(); addPend(cid,mid,'image',prompt,'Image '+(i+1)+'/'+cnt,ratio);
+    kieCreate('nano-banana-pro',input).then(tid => {
+      updateApiDot('ok');
+      pollLoop(tid, urls=>{ succCard(cid,mid,'image',urls[0],prompt,'nano-banana-pro',cost); saveHist({id:cid,modelId:mid,type:'image',prompt,url:urls[0],model:'nano-banana-pro',timestamp:Date.now(),estimatedCost:cost}); }, err=>failCard(cid,err));
+    }).catch(e=>{ if(e.name==='TypeError'||(e.message&&e.message.includes('Failed to fetch'))) showCors(); failCard(cid,e.message||'Submit failed'); });
+  }
+  btn.disabled=false; btn.textContent='Generate';
+}
+
+async function genVi(mid) {
+  const prompt=withIdentity($('vi-p').value.trim(), mid); if(!prompt){alert('Enter a prompt.');return;}
+  const model=$('vi-m').value==='__c'?$('vi-mc').value.trim():$('vi-m').value;
+  if(!model){alert('Enter a model string.');return;}
+  const cnt=parseInt($('vi-c').value), ratio=$('vi-r').value, dur=$('vi-d').value, neg=$('vi-n').value.trim();
+  const cost=getCost(model);
+  const btn=$('vi-gen'); btn.disabled=true; btn.innerHTML='<div class="spinner"></div>Submitting…';
+
+  // Upload frames if provided
+  const needUpload = viStartFrameB64 || viEndFrameB64;
+  if(needUpload && !getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings to use frames.');btn.disabled=false;btn.textContent='Generate';return;}
+  let startFrameUrl=null, endFrameUrl=null;
+  try {
+    if(viStartFrameB64){ btn.innerHTML='<div class="spinner"></div>Uploading start frame…'; startFrameUrl=await uploadCld(viStartFrameB64,'vi_start_'+Date.now()); }
+    if(viEndFrameB64){   btn.innerHTML='<div class="spinner"></div>Uploading end frame…';   endFrameUrl  =await uploadCld(viEndFrameB64,  'vi_end_'+Date.now());   }
+  } catch(e){ alert('Frame upload failed: '+e.message); btn.disabled=false; btn.textContent='Generate'; return; }
+
+  const isKling3 = model==='kling-3.0/video';
+  // Kling 2.6 only accepts 5s or 10s
+  const safeDur = (!isKling3 && dur==='15') ? '10' : dur;
+  const viMode = $('vi-mode') ? $('vi-mode').value : 'std';
+  const multiShot = $('vi-multishot').checked;
+
+  // Build model-specific input — Kling 2.6 rejects mode/multi_shots/negative_prompt
+  const input={prompt,aspect_ratio:ratio,duration:String(safeDur),sound:false};
+  if(isKling3) {
+    input.mode=viMode;
+    input.multi_shots=multiShot;
+    if(neg) input.negative_prompt=neg;
+  }
+  // image_urls: [startUrl, endUrl] — pass only defined ones
+  const frameUrls=[startFrameUrl,endFrameUrl].filter(Boolean);
+  if(frameUrls.length) input.image_urls=frameUrls;
+
+  btn.innerHTML='<div class="spinner"></div>Submitting…';
+  for(let i=0;i<cnt;i++) {
+    if(i>0) await delay(1100);
+    const cid=uid(); addPend(cid,mid,'video',prompt,'Video '+(i+1)+'/'+cnt,ratio);
+    kieCreate(model,input).then(tid => {
+      updateApiDot('ok');
+      pollLoop(tid, urls=>{ succCard(cid,mid,'video',urls[0],prompt,model,cost); saveHist({id:cid,modelId:mid,type:'video',prompt,url:urls[0],model,timestamp:Date.now(),estimatedCost:cost}); }, err=>failCard(cid,err));
+    }).catch(e=>{ if(e.name==='TypeError'||(e.message&&e.message.includes('Failed to fetch'))) showCors(); failCard(cid,e.message||'Submit failed'); });
+  }
+  btn.disabled=false; btn.textContent='Generate';
+}
+
+// ── GRID ──
+function renderGrid() {
+  $('empty').classList.toggle('hidden', items.length>0);
+  $('ogrid').style.display = items.length>0?'':'none';
+  updateBadge();
+}
+
+function getTarget(mid) {
+  const mids=[...new Set(items.map(i=>i.modelId))];
+  if(mids.length<=1) return $('ogrid');
+  const sid='msec-'+mid; let sec=$(sid);
+  if(!sec) {
+    const m=MODELS.find(x=>x.id===mid);
+    const w=document.createElement('div'); w.className='msec'; w.id=sid;
+    w.innerHTML=`<div class="msec-title" style="color:${m.color}">${m.name}</div><div class="msec-grid" id="mscg-${mid}"></div>`;
+    $('ogrid').appendChild(w); sec=w;
+  }
+  return $('mscg-'+mid)||sec;
+}
+
+function addPend(cid, mid, type, prompt, label, ratio) {
+  items.push({id:cid,modelId:mid,type,status:'pending',prompt});
+  $('empty').classList.add('hidden'); $('ogrid').style.display='';
+  const m=MODELS.find(x=>x.id===mid);
+  const card=document.createElement('div');
+  card.className='gcard'+ratCls(ratio); card.id='c-'+cid;
+  card.innerHTML=`<div class="cbadge" style="color:${m.color}">${m.name}</div><div class="ctype">${type==='video'?'Video':'Image'}</div><div class="cpend"><div class="spinner lt"></div><div class="cpend-lbl">${label}</div><div class="cprog-wrap"><div class="cprog"></div></div></div>`;
+  const t=getTarget(mid); t.insertBefore(card,t.firstChild);
+  card.scrollIntoView({behavior:'smooth',block:'nearest'});
+  updateBadge();
+}
+
+function succCard(cid, mid, type, url, prompt, model, cost) {
+  const item=items.find(x=>x.id===cid); if(item){item.status='success';item.url=url;item.cost=cost;}
+  const card=$('c-'+cid); if(!card) return;
+  const isVid=type==='video';
+  const m=MODELS.find(x=>x.id===mid);
+  const media=isVid?`<video src="${url}" loop muted playsinline></video>`:`<img src="${url}" loading="lazy" alt="">`;
+  card.innerHTML=`${media}<div class="cbadge" style="color:${m.color}">${m.name}</div><div class="ctype">${isVid?'Video':'Image'}</div><div class="covlay"><div class="covprompt">${esc(prompt)}</div><div class="covact"><button class="covbtn" onclick="dlUrl('${url}','${cid}')">Download</button><button class="covbtn" onclick="cpUrl('${url}')">Copy URL</button><span class="covcost">~${f$(cost)}</span></div></div>`;
+  if(isVid){const v=card.querySelector('video');card.addEventListener('mouseenter',()=>v.play());card.addEventListener('mouseleave',()=>{v.pause();v.currentTime=0;});}
+  updateBadge();
+}
+
+function failCard(cid, msg) {
+  const item=items.find(x=>x.id===cid); if(item) item.status='failed';
+  const card=$('c-'+cid); if(!card) return;
+  card.classList.add('fail');
+  card.innerHTML=`<div class="cfail"><div class="cfail-icon">&#9888;</div><div class="cfail-msg">${esc(msg||'Unknown error')}</div></div>`;
+  updateBadge();
+}
+
+function updateBadge() {
+  const pend=items.filter(x=>x.status==='pending').length;
+  const b=$('obadge');
+  if(pend>0){b.style.display='';b.textContent=pend+' generating…';}
+  else if(items.length>0){b.style.display='';b.textContent=items.filter(x=>x.status==='success').length+' done';}
+  else b.style.display='none';
+}
+
+// ── ACTIONS ──
+function dlUrl(url, id) {
+  const a=document.createElement('a'); a.href=url; a.download='cuzo_'+(id||Date.now())+'.jpg'; a.target='_blank';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+function cpUrl(url) { navigator.clipboard.writeText(url).catch(()=>alert('URL: '+url)); }
+function dlAll() {
+  const ok=items.filter(x=>x.status==='success');
+  if(!ok.length){alert('No completed items.');return;}
+  ok.forEach((x,i)=>setTimeout(()=>dlUrl(x.url,x.id),i*300));
+}
+function clrOutput() {
+  const p=items.filter(x=>x.status==='pending').length;
+  if(p>0&&!confirm(p+' items generating. Clear anyway?')) return;
+  items=[]; $('ogrid').innerHTML=''; $('ogrid').style.display='none';
+  $('empty').classList.remove('hidden'); updateBadge();
+}
+
+// ── MODEL IDENTITY PANEL ──
+let idModelId = null;
+
+function getIdentity(mid) {
+  try { return JSON.parse(localStorage.getItem('cuzo_identity_'+mid)||'{}'); } catch(_){ return {}; }
+}
+function saveIdentity(mid, data) {
+  localStorage.setItem('cuzo_identity_'+mid, JSON.stringify(data));
+}
+function getAlwaysInclude(mid) {
+  return getIdentity(mid).alwaysInclude || '';
+}
+
+function openIdentityPanel(mid) {
+  idModelId = mid;
+  const m = MODELS.find(x=>x.id===mid); if(!m) return;
+  const identity = getIdentity(mid);
+  const refs = getRefs(mid);
+
+  // Header
+  $('id-name').textContent = m.name;
+  $('id-niche').textContent = m.niche || '';
+  $('id-name').style.color = m.color;
+
+  // Hero image — use first ref photo
+  const hero = $('id-hero');
+  const heroEmpty = $('id-hero-empty');
+  // Remove any existing img
+  const existingImg = hero.querySelector('img');
+  if (existingImg) existingImg.remove();
+  if (refs.length > 0) {
+    heroEmpty.style.display = 'none';
+    const img = document.createElement('img');
+    img.src = refs[0];
+    img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover';
+    hero.insertBefore(img, hero.firstChild);
+  } else {
+    heroEmpty.style.display = '';
+    heroEmpty.textContent = m.name[0];
+  }
+
+  // Ref grid (4 per row, up to 8)
+  buildIdRefGrid(refs, m.color);
+
+  // Notes + always include
+  $('id-notes').value = identity.notes || '';
+  $('id-always').value = identity.alwaysInclude || '';
+  $('id-result').textContent = '';
+
+  $('id-panel').classList.add('open');
+  $('id-overlay').classList.add('open');
+}
+
+function buildIdRefGrid(refs, color) {
+  const grid = $('id-ref-grid'); grid.innerHTML = '';
+  const slots = 8;
+  for (let i=0; i<slots; i++) {
+    if (refs[i]) {
+      const img = document.createElement('img');
+      img.src = refs[i]; img.className = 'id-ref-thumb';
+      img.title = 'Click to set as hero';
+      img.addEventListener('click', () => {
+        // Swap to hero
+        const hero = $('id-hero');
+        const existing = hero.querySelector('img');
+        if (existing) existing.remove();
+        $('id-hero-empty').style.display = 'none';
+        const hi = document.createElement('img');
+        hi.src = refs[i];
+        hi.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover';
+        hero.insertBefore(hi, hero.firstChild);
+      });
+      grid.appendChild(img);
+    } else {
+      const empty = document.createElement('div');
+      empty.className = 'id-ref-empty';
+      empty.innerHTML = '+';
+      empty.title = 'Add ref photo';
+      empty.addEventListener('click', () => $('id-fi').click());
+      grid.appendChild(empty);
+    }
+  }
+}
+
+function closeIdentityPanel() {
+  $('id-panel').classList.remove('open');
+  $('id-overlay').classList.remove('open');
+}
+
+function saveIdentityPanel() {
+  if (!idModelId) return;
+  saveIdentity(idModelId, {
+    notes: $('id-notes').value.trim(),
+    alwaysInclude: $('id-always').value.trim(),
+  });
+  $('id-result').className='tresult ok';
+  $('id-result').textContent = 'Identity saved.';
+  setTimeout(()=>{ $('id-result').textContent=''; }, 2000);
+}
+
+// Auto-save notes/always on input
+function bindIdentityAutoSave() {
+  ['id-notes','id-always'].forEach(id => {
+    $(id).addEventListener('input', () => {
+      if (!idModelId) return;
+      saveIdentity(idModelId, {
+        notes: $('id-notes').value.trim(),
+        alwaysInclude: $('id-always').value.trim(),
+      });
+    });
+  });
+}
+
+async function handleIdRefUpload(e) {
+  if (!idModelId) return;
+  const files = Array.from(e.target.files);
+  const refs = getRefs(idModelId);
+  const toAdd = files.slice(0, 8 - refs.length);
+  for (const f of toAdd) {
+    refs.push(await compressImage(f, 1200, 0.88));
+  }
+  saveRefs(idModelId, refs);
+  buildIdRefGrid(refs, MODELS.find(x=>x.id===idModelId)?.color);
+  // Update hero if it was empty
+  const hero = $('id-hero');
+  if (!hero.querySelector('img') && refs.length > 0) {
+    $('id-hero-empty').style.display = 'none';
+    const img = document.createElement('img');
+    img.src = refs[0];
+    img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover';
+    hero.insertBefore(img, hero.firstChild);
+  }
+  refreshRefGrids(); buildSettingsRefs();
+  e.target.value = '';
+}
+
+// Inject alwaysInclude into a prompt string
+function withIdentity(prompt, mid) {
+  const always = getAlwaysInclude(mid).trim();
+  if (!always) return prompt;
+  return prompt + (prompt.endsWith(',') ? ' ' : ', ') + always;
+}
+
+// ── API DOT ──
+function updateApiDot(state) {
+  const dot=$('api-dot'), txt=$('api-txt');
+  if(!getKie()){dot.className='';txt.textContent='No key';return;}
+  if(state==='ok'){dot.className='ok';txt.textContent='Connected';}
+  else if(state==='err'){dot.className='err';txt.textContent='Error';}
+  else{dot.className='ok';txt.textContent='Key set';}
+}
+
+// ── MODEL MANAGER ──
+function buildModelList() {
+  const c = $('model-list'); if(!c) return;
+  c.innerHTML = '';
+  if (!MODELS.length) {
+    c.innerHTML = '<div style="color:var(--muted2);font-size:11px;padding:8px 0">No models yet. Add one below.</div>';
+    return;
+  }
+  MODELS.forEach((m, idx) => {
+    const refs = getRefs(m.id);
+    const row = document.createElement('div');
+    row.className = 'model-row';
+    row.innerHTML = `
+      <div class="model-row-dot" style="background:${m.color}"></div>
+      <div class="model-row-name">${esc(m.name)}</div>
+      <div class="model-row-niche">${esc(m.niche||'')}</div>
+      <div style="font-size:9px;color:var(--muted2);margin-right:4px">${refs.length} ref${refs.length!==1?'s':''}</div>
+      <div class="model-row-actions">
+        <button class="mibtn" onclick="editModelPrompt('${m.id}')">Edit</button>
+        <button class="mibtn del" onclick="deleteModel('${m.id}')">Delete</button>
+      </div>`;
+    c.appendChild(row);
+  });
+}
+
+function editModelPrompt(id) {
+  const m = MODELS.find(x => x.id === id);
+  if (!m) return;
+  const newName = prompt('Model name:', m.name);
+  if (newName === null) return;
+  const newNiche = prompt('Niche / description:', m.niche || '');
+  if (newNiche === null) return;
+  const newColor = prompt('Color (hex, e.g. #FF5500):', m.color);
+  if (newColor === null) return;
+  if (!newName.trim()) { alert('Name cannot be empty.'); return; }
+  m.name = newName.trim();
+  m.niche = newNiche.trim();
+  if (/^#[0-9a-fA-F]{3,6}$/.test(newColor.trim())) m.color = newColor.trim();
+  saveModels();
+  buildModelList();
+  buildModelBar();
+  buildSettingsRefs();
+}
+
+function deleteModel(id) {
+  const m = MODELS.find(x => x.id === id);
+  if (!m) return;
+  const refs = getRefs(id);
+  const msg = refs.length > 0
+    ? `Delete "${m.name}"? This will also remove their ${refs.length} reference photo(s). Cannot be undone.`
+    : `Delete "${m.name}"? Cannot be undone.`;
+  if (!confirm(msg)) return;
+  localStorage.removeItem('cuzo_refs_' + id);
+  localStorage.removeItem('cuzo_ref_urls_' + id);
+  MODELS.splice(MODELS.findIndex(x => x.id === id), 1);
+  saveModels();
+  if (activeModel === id) activeModel = MODELS[0]?.id || '';
+  buildModelList();
+  buildModelBar();
+  buildSettingsRefs();
+}
+
+let editingModelId = null;
+
+function openAddModelForm() {
+  editingModelId = null;
+  $('nm-name').value = '';
+  $('nm-niche').value = '';
+  $('nm-color-picker').value = '#ffffff';
+  $('nm-color-preview').style.background = '#ffffff';
+  $('nm-color-hex').textContent = '#ffffff';
+  $('nm-result').textContent = '';
+  $('add-model-form').classList.add('open');
+  $('add-model-btn').style.display = 'none';
+}
+
+function closeAddModelForm() {
+  $('add-model-form').classList.remove('open');
+  $('add-model-btn').style.display = '';
+}
+
+function saveNewModel() {
+  const name = $('nm-name').value.trim();
+  const niche = $('nm-niche').value.trim();
+  const color = $('nm-color-picker').value;
+  if (!name) { $('nm-result').className='tresult err'; $('nm-result').textContent='Name is required.'; return; }
+  const baseId = name.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,12) || 'model';
+  let id = baseId;
+  let n = 2;
+  while (MODELS.find(x => x.id === id)) { id = baseId + n++; }
+  MODELS.push({ id, name, color, niche });
+  saveModels();
+  buildModelList();
+  buildModelBar();
+  buildSettingsRefs();
+  closeAddModelForm();
+  $('nm-result').className='tresult ok'; $('nm-result').textContent=`"${name}" added!`;
+  setTimeout(()=>{ $('nm-result').textContent=''; }, 2500);
+}
+
+// ── SETTINGS PANEL ──
+function openSettings() { loadSettingsInputs(); buildModelList(); buildSettingsRefs(); $('spanel').classList.add('open'); $('sovlay').classList.add('open'); }
+function closeSettings() { $('spanel').classList.remove('open'); $('sovlay').classList.remove('open'); }
+
+async function testKie() {
+  const k=$('kie-k').value.trim(); if(!k){$('kie-tr').className='tresult err';$('kie-tr').textContent='No key.';return;}
+  $('kie-tr').className='tresult';$('kie-tr').textContent='Testing…';
+  try {
+    const r=await fetch(KIE+'/recordInfo?taskId=test',{headers:{'Authorization':'Bearer '+k}});
+    if(r.status===401||r.status===403){$('kie-tr').className='tresult err';$('kie-tr').textContent='Invalid key.';}
+    else{$('kie-tr').className='tresult ok';$('kie-tr').textContent='Connection OK!';localStorage.setItem('cuzo_kie_key',k);updateApiDot('ok');}
+  } catch(e){
+    if(e.name==='TypeError'){showCors();$('kie-tr').className='tresult err';$('kie-tr').textContent='CORS error — see banner.';}
+    else{$('kie-tr').className='tresult err';$('kie-tr').textContent=e.message;}
+  }
+}
+
+async function testIbb() {
+  saveCld();
+  const cloud=getCldCloud(), preset=getCldPreset();
+  if(!cloud||!preset){$('imgbb-tr').className='tresult err';$('imgbb-tr').textContent='Enter Cloud Name and Upload Preset.';return;}
+  $('imgbb-tr').className='tresult';$('imgbb-tr').textContent='Testing…';
+  const tiny='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  try {
+    const url = await uploadCld(tiny, 'cuzo_test_'+Date.now());
+    if(url){$('imgbb-tr').className='tresult ok';$('imgbb-tr').textContent='Cloudinary OK! Upload works.';}
+  } catch(e){$('imgbb-tr').className='tresult err';$('imgbb-tr').textContent=e.message;}
+}
+
+// ── HISTORY ──
+function openHistory() { $('hpanel').classList.add('open'); buildHFilters(); renderHistory(); }
+function closeHistory() { $('hpanel').classList.remove('open'); }
+
+function buildHFilters() {
+  const c=$('hfils'); c.innerHTML='';
+  const mk=(lbl,active,onClick)=>{ const el=document.createElement('div'); el.className='hfil'+(active?' active':''); el.textContent=lbl; el.addEventListener('click',onClick); return el; };
+  c.appendChild(mk('All Models',hModelFil==='all',()=>{hModelFil='all';buildHFilters();renderHistory();}));
+  MODELS.forEach(m=>c.appendChild(mk(m.name,hModelFil===m.id,()=>{hModelFil=m.id;buildHFilters();renderHistory();})));
+  c.appendChild(mk('Images',hTypeFil==='image',()=>{hTypeFil=hTypeFil==='image'?'all':'image';buildHFilters();renderHistory();}));
+  c.appendChild(mk('Videos',hTypeFil==='video',()=>{hTypeFil=hTypeFil==='video'?'all':'video';buildHFilters();renderHistory();}));
+}
+
+function renderHistory() {
+  let h=JSON.parse(localStorage.getItem('cuzo_history')||'[]');
+  const q=$('hsearch').value.toLowerCase();
+  if(hModelFil!=='all') h=h.filter(x=>x.modelId===hModelFil);
+  if(hTypeFil!=='all') h=h.filter(x=>x.type===hTypeFil);
+  if(q) h=h.filter(x=>x.prompt.toLowerCase().includes(q));
+  const g=$('hgrid'); g.innerHTML='';
+  if(!h.length){g.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:40px">No history found.</div>';return;}
+  h.forEach(x=>{
+    const m=MODELS.find(y=>y.id===x.modelId)||{color:'#888',name:x.modelId};
+    const card=document.createElement('div'); card.className='hcard';
+    const isVid=x.type==='video';
+    card.innerHTML=(isVid?`<video src="${x.url}" muted loop playsinline></video>`:`<img src="${x.url}" loading="lazy">`)+`<div class="hcard-info"><div class="hcard-model" style="color:${m.color}">${m.name}</div><div class="hcard-prompt">${esc(x.prompt)}</div></div>`;
+    if(isVid){const v=card.querySelector('video');card.addEventListener('mouseenter',()=>v.play());card.addEventListener('mouseleave',()=>{v.pause();v.currentTime=0;});}
+    card.addEventListener('click',()=>openViewer(x.url,x.type,x.prompt));
+    g.appendChild(card);
+  });
+}
+
+// ── VIEWER ──
+function openViewer(url, type, prompt) {
+  $('viewer').classList.add('open');
+  if(type==='video'){$('vimg').style.display='none';$('vvid').style.display='';$('vvid').src=url;}
+  else{$('vvid').style.display='none';$('vimg').style.display='';$('vimg').src=url;}
+  $('vprompt').textContent=prompt||'';
+}
+function closeViewer() { $('viewer').classList.remove('open'); $('vvid').pause(); $('vvid').src=''; }
+
+// ── START ──
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initGate);
+} else {
+  initGate();
+}
+</script>
+</body>
+</html>
