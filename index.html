@@ -90,7 +90,8 @@ body.multi-mode .model-chip.msel .mcheck{background:var(--gold);border-color:var
 .stab.active{background:var(--surface);color:var(--text)}
 .vi-toggle-on{background:var(--text)!important}
 .vi-toggle-on::after{transform:translateX(16px)!important}
-#vi-ms-track::after{content:'';position:absolute;height:16px;width:16px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.2s}
+#vi-ms-track::after,#vi-sound-track::after,#mc-sa-track::after{content:'';position:absolute;height:16px;width:16px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.2s}
+#mc-sa-track::after{transform:translateX(16px)}
 
 /* FORM */
 .fg{margin-bottom:14px}
@@ -442,16 +443,28 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
               </div>
             </div>
           </div>
-          <!-- Multi-shot toggle -->
-          <div class="fg" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--card);border-radius:8px;border:1px solid var(--border)">
-            <div>
-              <div style="font-size:13px;font-weight:500;color:var(--text)">Multi-shot</div>
-              <div style="font-size:10px;color:var(--muted2);margin-top:2px">Multiple scenes in one generation</div>
+          <!-- Toggles row: Multi-shot + Sound -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="fg" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--card);border-radius:8px;border:1px solid var(--border);margin:0">
+              <div>
+                <div style="font-size:12px;font-weight:500;color:var(--text)">Multi-shot</div>
+                <div style="font-size:9px;color:var(--muted2);margin-top:2px">Multiple scenes</div>
+              </div>
+              <label style="position:relative;display:inline-block;width:38px;height:22px;flex-shrink:0">
+                <input type="checkbox" id="vi-multishot" style="opacity:0;width:0;height:0">
+                <span onclick="this.previousElementSibling.click()" style="position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:11px;transition:.2s" id="vi-ms-track"></span>
+              </label>
             </div>
-            <label style="position:relative;display:inline-block;width:38px;height:22px;flex-shrink:0">
-              <input type="checkbox" id="vi-multishot" style="opacity:0;width:0;height:0">
-              <span onclick="this.previousElementSibling.click()" style="position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:11px;transition:.2s" id="vi-ms-track"></span>
-            </label>
+            <div class="fg" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--card);border-radius:8px;border:1px solid var(--border);margin:0">
+              <div>
+                <div style="font-size:12px;font-weight:500;color:var(--text)">Sound</div>
+                <div style="font-size:9px;color:var(--muted2);margin-top:2px">Add audio to video</div>
+              </div>
+              <label style="position:relative;display:inline-block;width:38px;height:22px;flex-shrink:0">
+                <input type="checkbox" id="vi-sound" style="opacity:0;width:0;height:0">
+                <span onclick="this.previousElementSibling.click()" style="position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:11px;transition:.2s" id="vi-sound-track"></span>
+              </label>
+            </div>
           </div>
           <div class="fg"><label class="fl">Prompt</label><textarea id="vi-p" placeholder="Describe the video scene in detail…"></textarea></div>
           <div class="fg"><label class="fl">Negative Prompt <span>(optional)</span></label><textarea id="vi-n" class="sm" placeholder="ugly, blurry, watermark…"></textarea></div>
@@ -466,7 +479,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
           </div>
           <div class="row2">
             <div class="fg"><label class="fl">Aspect Ratio</label><select id="vi-r"><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option></select></div>
-            <div class="fg"><label class="fl">Duration</label><select id="vi-d"><option value="5">5s</option><option value="10">10s</option><option value="15">15s</option></select></div>
+            <div class="fg"><label class="fl">Duration</label><select id="vi-d"><option value="3">3s</option><option value="4">4s</option><option value="5" selected>5s</option><option value="6">6s</option><option value="7">7s</option><option value="8">8s</option><option value="9">9s</option><option value="10">10s</option><option value="11">11s</option><option value="12">12s</option><option value="13">13s</option><option value="14">14s</option><option value="15">15s</option></select></div>
           </div>
           <div class="fg"><label class="fl">Mode</label><select id="vi-mode"><option value="std">Standard (720p)</option><option value="pro">Pro (1080p)</option><option value="4K">4K</option></select></div>
           <div class="fg"><label class="fl">Count</label><select id="vi-c" style="max-width:120px"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="5">5</option></select></div>
@@ -515,6 +528,17 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
             <div class="fg"><label class="fl">Character From</label><select id="mc-orient"><option value="image">Image (default)</option><option value="video">Video</option></select></div>
           </div>
           <div class="cost-prev" id="mc-cp"></div>
+          <!-- Sync Audio toggle -->
+          <div class="fg" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--card);border-radius:8px;border:1px solid var(--border)">
+            <div>
+              <div style="font-size:13px;font-weight:500;color:var(--text)">🔊 Sync Reference Audio</div>
+              <div style="font-size:10px;color:var(--muted2);margin-top:2px">Copy exact audio from your reference video onto the output</div>
+            </div>
+            <label style="position:relative;display:inline-block;width:38px;height:22px;flex-shrink:0">
+              <input type="checkbox" id="mc-sync-audio" checked style="opacity:0;width:0;height:0">
+              <span onclick="this.previousElementSibling.click()" style="position:absolute;cursor:pointer;inset:0;background:var(--text);border-radius:11px;transition:.2s" id="mc-sa-track"></span>
+            </label>
+          </div>
           <div id="mc-status" style="font-size:11px;color:var(--muted2);margin-bottom:10px;min-height:16px"></div>
           <button class="gen-btn" id="mc-gen">Generate Motion Control</button>
         </div>
@@ -891,6 +915,7 @@ function bindAll() {
   $('vi-sf-fi').addEventListener('change', e => handleViStartFrameUpload(e));
   $('vi-ef-fi').addEventListener('change', e => handleViEndFrameUpload(e));
   $('vi-multishot').addEventListener('change', syncMultiShotToggle);
+  $('vi-sound').addEventListener('change', () => $('vi-sound-track').classList.toggle('vi-toggle-on', $('vi-sound').checked));
   $('mc-img-fi').addEventListener('change', e => handleMcImageUpload(e));
   $('mc-vid-fi').addEventListener('change', e => handleMcVideoUpload(e));
 
@@ -1046,6 +1071,46 @@ async function pollLoop(taskId, onOk, onFail, maxP=110) {
 function showCors() {
   if(corsShown) return; corsShown=true;
   $('cors-banner').classList.add('show');
+}
+
+// ── FFMPEG AUDIO MERGE ──
+let _ffmpeg = null;
+
+async function loadFFmpeg() {
+  if(_ffmpeg) return _ffmpeg;
+  if(!window.FFmpeg) {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';
+      s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+  }
+  const { createFFmpeg } = FFmpeg;
+  _ffmpeg = createFFmpeg({ log: false });
+  await _ffmpeg.load();
+  return _ffmpeg;
+}
+
+async function mergeAudioOntoVideo(generatedVideoUrl, referenceVideoFile) {
+  const ff = await loadFFmpeg();
+  const { fetchFile } = FFmpeg;
+  ff.FS('writeFile', 'gen.mp4',  await fetchFile(generatedVideoUrl));
+  ff.FS('writeFile', 'ref.mp4',  await fetchFile(referenceVideoFile));
+  await ff.run(
+    '-i', 'gen.mp4',
+    '-i', 'ref.mp4',
+    '-c:v', 'copy',
+    '-c:a', 'aac',
+    '-map', '0:v:0',
+    '-map', '1:a:0',
+    '-shortest',
+    'out.mp4'
+  );
+  const data = ff.FS('readFile', 'out.mp4');
+  // cleanup
+  ['gen.mp4','ref.mp4','out.mp4'].forEach(f => { try{ ff.FS('unlink',f); }catch(_){} });
+  return URL.createObjectURL(new Blob([data.buffer], {type:'video/mp4'}));
 }
 
 // ── CLOUDINARY UPLOAD ──
@@ -1356,22 +1421,45 @@ async function genMc(mid) {
   btn.innerHTML='<div class="spinner"></div>Submitting…';
 
   // KIE Motion Control API: input_urls (image array) + video_urls (video array)
+  // Kling 3.0 only accepts: input_urls, video_urls, mode ("std"/"pro")
+  // Kling 2.6 also accepts: character_orientation
   const input = {
     input_urls: [imageUrl],
     video_urls: [videoUrl],
     mode: mode,
-    character_orientation: orient,
   };
+  if(model !== 'kling-3.0/motion-control') {
+    input.character_orientation = orient;
+  }
 
   const cid=uid();
   addPend(cid, mid, 'video', 'Motion Control', 'Motion Control', '9:16');
+
+  const syncAudio = $('mc-sync-audio').checked;
+  const refVideoFileSnap = mcVideoFile; // capture reference at submit time
 
   try {
     const tid = await kieCreate(model, input);
     updateApiDot('ok');
     pollLoop(tid,
-      urls => { succCard(cid,mid,'video',urls[0],'Motion Control',model,cost); saveHist({id:cid,modelId:mid,type:'video',prompt:'Motion Control',url:urls[0],model,timestamp:Date.now(),estimatedCost:cost}); },
-      err  => failCard(cid, err)
+      async urls => {
+        let finalUrl = urls[0];
+        if(syncAudio && refVideoFileSnap) {
+          try {
+            // Show merging status on the pending card
+            const pendEl = document.getElementById(cid);
+            if(pendEl) { const lbl = pendEl.querySelector('.cpend-lbl'); if(lbl) lbl.textContent = 'Merging audio…'; }
+            finalUrl = await mergeAudioOntoVideo(urls[0], refVideoFileSnap);
+          } catch(mergeErr) {
+            console.warn('Audio merge failed, using original video:', mergeErr);
+            // Fall back to original video silently
+            finalUrl = urls[0];
+          }
+        }
+        succCard(cid, mid, 'video', finalUrl, 'Motion Control', model, cost);
+        saveHist({id:cid, modelId:mid, type:'video', prompt:'Motion Control', url:finalUrl, model, timestamp:Date.now(), estimatedCost:cost});
+      },
+      err => failCard(cid, err)
     );
   } catch(e) {
     if(e.name==='TypeError'||(e.message&&e.message.includes('Failed to fetch'))) showCors();
@@ -1484,7 +1572,8 @@ async function genVi(mid) {
   const multiShot = $('vi-multishot').checked;
 
   // Build model-specific input — Kling 2.6 rejects mode/multi_shots/negative_prompt
-  const input={prompt,aspect_ratio:ratio,duration:String(safeDur),sound:false};
+  const soundOn = $('vi-sound').checked;
+  const input={prompt,aspect_ratio:ratio,duration:String(safeDur),sound:soundOn};
   if(isKling3) {
     input.mode=viMode;
     input.multi_shots=multiShot;
