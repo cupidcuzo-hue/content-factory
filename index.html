@@ -350,7 +350,13 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
             <input type="file" id="sd-fi" accept="image/jpeg,image/png,image/webp" multiple style="display:none">
             <div id="sd-rw" style="display:none;color:var(--warn);font-size:10px;margin-top:6px">Cloudinary not configured — add Cloud Name &amp; Upload Preset in Settings.</div>
           </div>
-          <div class="fg"><label class="fl">Prompt</label><textarea id="sd-p" placeholder="Describe the image in detail…"></textarea></div>
+          <div class="fg">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+              <label class="fl" style="margin:0">Prompt</label>
+              <button type="button" onclick="openTpl('sd-p')" style="background:none;border:1px solid var(--border);border-radius:5px;color:var(--muted2);padding:2px 8px;font-size:10px;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s" onmouseover="this.style.borderColor='var(--gold-dim)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted2)'">⚡ Templates</button>
+            </div>
+            <textarea id="sd-p" placeholder="Describe the image in detail…"></textarea>
+          </div>
           <div class="fg"><label class="fl">Negative Prompt <span>(optional)</span></label><textarea id="sd-n" class="sm" placeholder="ugly, blurry, watermark, low quality…"></textarea></div>
           <div class="fg">
             <label class="fl">Model</label>
@@ -465,7 +471,13 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
               </label>
             </div>
           </div>
-          <div class="fg"><label class="fl">Prompt</label><textarea id="vi-p" placeholder="Describe the video scene in detail…"></textarea></div>
+          <div class="fg">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+              <label class="fl" style="margin:0">Prompt</label>
+              <button type="button" onclick="openTpl('vi-p')" style="background:none;border:1px solid var(--border);border-radius:5px;color:var(--muted2);padding:2px 8px;font-size:10px;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s" onmouseover="this.style.borderColor='var(--gold-dim)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted2)'">⚡ Templates</button>
+            </div>
+            <textarea id="vi-p" placeholder="Describe the video scene in detail…"></textarea>
+          </div>
           <div class="fg"><label class="fl">Negative Prompt <span>(optional)</span></label><textarea id="vi-n" class="sm" placeholder="ugly, blurry, watermark…"></textarea></div>
           <div class="fg">
             <label class="fl">Model</label>
@@ -693,6 +705,16 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
   <div id="hgrid"></div>
 </div>
 
+<!-- TEMPLATES PANEL -->
+<div id="tpl-overlay" onclick="closeTpl()" style="position:fixed;inset:0;z-index:900;background:rgba(0,0,0,.6);display:none;align-items:flex-end;justify-content:center;padding-bottom:0"></div>
+<div id="tpl-panel" style="position:fixed;bottom:0;left:0;right:0;z-index:901;background:#0a0a0a;border-top:1px solid #1c1c1c;border-radius:18px 18px 0 0;max-height:75vh;overflow-y:auto;transform:translateY(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);padding:0 0 32px">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px 12px;border-bottom:1px solid #1a1a1a;position:sticky;top:0;background:#0a0a0a;z-index:1">
+    <div style="font-family:'Playfair Display',serif;font-size:17px;color:#fff">⚡ Prompt Templates</div>
+    <button onclick="closeTpl()" style="background:none;border:none;color:#555;font-size:20px;cursor:pointer;padding:2px 6px">✕</button>
+  </div>
+  <div id="tpl-body" style="padding:16px 20px"></div>
+</div>
+
 <!-- VIEWER -->
 <div id="viewer">
   <button class="vclose" id="vclbtn">&#215;</button>
@@ -794,6 +816,7 @@ function initApp() {
   if(!localStorage.getItem('cuzo_kie_key'))    localStorage.setItem('cuzo_kie_key',    '47b5acc50292f9b00b7da66e25dfb497');
   if(!localStorage.getItem('cuzo_cld_cloud'))  localStorage.setItem('cuzo_cld_cloud',  'duqitd5xn');
   if(!localStorage.getItem('cuzo_cld_preset')) localStorage.setItem('cuzo_cld_preset', 'cuzo_refs');
+  initNotifications();
   buildModelBar();
   loadSettingsInputs();
   updateCostDisplay();
@@ -1629,6 +1652,11 @@ function addPend(cid, mid, type, prompt, label, ratio) {
 function succCard(cid, mid, type, url, prompt, model, cost) {
   const item=items.find(x=>x.id===cid); if(item){item.status='success';item.url=url;item.cost=cost;}
   const card=$('c-'+cid); if(!card) return;
+  const m2=MODELS.find(x=>x.id===mid);
+  pushNotif(
+    `✅ ${type==='video'?'Video':'Image'} ready — ${m2?m2.name:mid}`,
+    prompt.length>80 ? prompt.slice(0,80)+'…' : prompt
+  );
   const isVid=type==='video';
   const m=MODELS.find(x=>x.id===mid);
   const media=isVid?`<video src="${url}" loop muted playsinline></video>`:`<img src="${url}" loading="lazy" alt="">`;
@@ -1993,6 +2021,163 @@ function openViewer(url, type, prompt) {
   $('vprompt').textContent=prompt||'';
 }
 function closeViewer() { $('viewer').classList.remove('open'); $('vvid').pause(); $('vvid').src=''; }
+
+// ── BROWSER NOTIFICATIONS ──
+function initNotifications() {
+  if(!('Notification' in window)) return;
+  if(Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function pushNotif(title, body, icon) {
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    new Notification(title, {
+      body: body,
+      icon: icon || '',
+      silent: false,
+    });
+  } catch(_) {}
+}
+
+// ── PROMPT TEMPLATES ──
+const TEMPLATES = {
+  image: [
+    {
+      cat: '📸 Lifestyle',
+      prompts: [
+        'Morning routine, woman waking up naturally, soft golden sunlight through sheer curtains, messy hair, cozy bedroom, ultra realistic, 8K',
+        'Sitting in a luxury café sipping iced coffee, casual chic outfit, warm bokeh lighting, candid moment, photorealistic',
+        'Mirror selfie in a stylish apartment, trendy outfit, natural makeup, soft afternoon light, ultra realistic',
+        'Relaxing on a hotel rooftop pool, city skyline background, sunset hour, lifestyle photography, cinematic',
+        'Reading on a couch, cozy home setting, warm lamp light, oversized sweater, soft and intimate, photorealistic',
+      ]
+    },
+    {
+      cat: '💪 Fitness',
+      prompts: [
+        'Gym selfie, athletic wear, defined physique, natural sweat, motivational energy, high contrast lighting, photorealistic',
+        'Yoga pose on a mat by the window, morning light, athletic body, peaceful expression, ultra realistic 8K',
+        'Running on a beach at sunrise, athletic outfit, motion blur background, cinematic shot, photorealistic',
+        'Post-workout stretch, sports bra and leggings, natural lighting gym, toned body, candid feel, realistic',
+        'Lifting weights in a modern gym, confident expression, athletic build, dramatic lighting, photorealistic',
+      ]
+    },
+    {
+      cat: '✨ Glam & Fashion',
+      prompts: [
+        'High fashion editorial portrait, designer outfit, dramatic studio lighting, bold makeup, vogue style, ultra realistic',
+        'Walking down a city street, stylish outfit, golden hour lighting, confident stride, fashion photography, cinematic',
+        'Posing in lingerie, elegant boudoir setting, soft window light, tasteful and artistic, high-end photography',
+        'Luxury brand photoshoot, expensive jewelry, sleek black outfit, studio background, editorial style, 8K',
+        'Rooftop party outfit, night city lights bokeh background, glam makeup, confident pose, photorealistic',
+      ]
+    },
+    {
+      cat: '🌸 Beauty & Close-up',
+      prompts: [
+        'Close-up beauty portrait, flawless skin, natural makeup, soft studio lighting, sharp focus eyes, 8K photorealistic',
+        'Skincare routine, woman applying serum, dewy glowing skin, clean aesthetic, morning light, ultra realistic',
+        'Hair flip close-up, healthy shiny hair, natural light, joyful expression, beauty photography, 8K',
+        'Eyes close-up with bold eye makeup, artistic and dramatic lighting, ultra sharp detail, magazine quality',
+        'Smiling portrait with perfect teeth, warm natural light, minimal makeup, fresh skin, ultra realistic 8K',
+      ]
+    },
+    {
+      cat: '🏖️ Beach & Outdoors',
+      prompts: [
+        'Walking on the beach at sunset, flowing sundress, golden hour lighting, waves in background, cinematic photorealistic',
+        'Bikini beach photoshoot, crystal clear water, tropical paradise, natural tan, candid feel, ultra realistic',
+        'Sitting on beach rocks, ocean view, wind in hair, white linen outfit, dreamy golden light, photorealistic',
+        'Poolside lounging, resort setting, sun-kissed skin, stylish swimwear, luxury lifestyle, photorealistic',
+        'Hiking trail portrait, nature background, athletic outfit, natural light, adventurous mood, 8K photorealistic',
+      ]
+    },
+  ],
+  video: [
+    {
+      cat: '🎬 Classic Kling',
+      prompts: [
+        'Woman walking slowly towards camera, city street background, golden hour light, hair moving naturally, cinematic, do not change face',
+        'Slow motion hair flip, looking directly at camera, studio background, beautiful lighting, confident expression, do not change face',
+        'Woman sitting at a café table, picking up coffee cup, smiling softly, warm bokeh background, cinematic slow motion',
+        'Walking on beach at sunset, waves in background, flowing dress moving in wind, cinematic camera pan, photorealistic',
+        'Woman looking out window, city view, soft rain, peaceful mood, slow zoom in, cinematic, do not change face or clothes',
+      ]
+    },
+    {
+      cat: '💃 Movement & Dance',
+      prompts: [
+        'Subtle body sway to music, standing in stylish outfit, studio background, smooth natural movement, cinematic lighting',
+        'Woman twirling in a dress, outdoor garden setting, golden hour, hair and dress flowing, slow motion, cinematic',
+        'Confident runway walk towards camera, fashion show setting, bold lighting, slow motion, editorial style',
+        'Stretching and moving on yoga mat, athletic wear, morning light through window, smooth flowing motion, cinematic',
+        'Dancing in a club, neon lights, energetic but elegant movement, slow motion capture, cinematic',
+      ]
+    },
+    {
+      cat: '👀 Reaction & Expression',
+      prompts: [
+        'Woman looking up from phone, surprised happy expression, café setting, natural candid reaction, cinematic',
+        'Slow smile building while looking at camera, warm studio light, intimate close-up, beautiful and natural, cinematic',
+        'Laughing naturally, head tilting back slightly, outdoor golden hour, joyful authentic moment, slow motion',
+        'Waking up naturally, stretching in bed, morning sunlight, cozy linen sheets, slow cinematic motion, do not change face',
+        'Blowing a kiss to camera, playful expression, bedroom setting, soft warm light, slow motion, cinematic',
+      ]
+    },
+    {
+      cat: '🌅 Lifestyle Scenes',
+      prompts: [
+        'Pouring morning coffee, cozy kitchen, warm light, steam rising from cup, slow cinematic motion, do not change face or clothes',
+        'Getting ready in bathroom mirror, applying lipstick, glam makeup look, warm vanity lights, slow motion close-up',
+        'Opening curtains to morning light, bedroom setting, stretching, peaceful expression, cinematic slow zoom, do not change face',
+        'Scrolling phone on couch, cozy outfit, warm home lighting, subtle smile, candid natural motion, cinematic',
+        'Stepping out of luxury car, confident walk, city background, stylish outfit, slow motion cinematic, do not change face',
+      ]
+    },
+  ]
+};
+
+let _tplTarget = null;
+
+function openTpl(targetId) {
+  _tplTarget = targetId;
+  const isVideo = targetId === 'vi-p';
+  const cats = isVideo ? TEMPLATES.video : TEMPLATES.image;
+
+  const body = $('tpl-body');
+  body.innerHTML = '';
+
+  cats.forEach(cat => {
+    const sec = document.createElement('div');
+    sec.style.cssText = 'margin-bottom:20px';
+    sec.innerHTML = `<div style="font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#555;margin-bottom:10px">${cat.cat}</div>`;
+    cat.prompts.forEach(p => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.style.cssText = 'width:100%;text-align:left;background:#111;border:1px solid #1c1c1c;border-radius:8px;color:#aaa;padding:10px 12px;font-size:11px;font-family:Inter,sans-serif;cursor:pointer;margin-bottom:6px;line-height:1.5;transition:all .15s;display:block';
+      btn.textContent = p;
+      btn.onmouseover = () => { btn.style.borderColor='#333'; btn.style.color='#fff'; btn.style.background='#161616'; };
+      btn.onmouseout  = () => { btn.style.borderColor='#1c1c1c'; btn.style.color='#aaa'; btn.style.background='#111'; };
+      btn.addEventListener('click', () => {
+        const ta = $(_tplTarget);
+        if(ta) { ta.value = p; ta.focus(); ta.dispatchEvent(new Event('input')); }
+        closeTpl();
+      });
+      sec.appendChild(btn);
+    });
+    body.appendChild(sec);
+  });
+
+  $('tpl-overlay').style.display = 'flex';
+  setTimeout(() => { $('tpl-panel').style.transform = 'translateY(0)'; }, 10);
+}
+
+function closeTpl() {
+  $('tpl-panel').style.transform = 'translateY(100%)';
+  setTimeout(() => { $('tpl-overlay').style.display = 'none'; }, 280);
+}
 
 // ── START ──
 if (document.readyState === 'loading') {
