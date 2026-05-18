@@ -91,7 +91,6 @@ body.multi-mode .model-chip.msel .mcheck{background:var(--gold);border-color:var
 .vi-toggle-on{background:var(--text)!important}
 .vi-toggle-on::after{transform:translateX(16px)!important}
 #vi-ms-track::after,#vi-sound-track::after,#mc-sa-track::after{content:'';position:absolute;height:16px;width:16px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.2s}
-#mc-sa-track::after{transform:translateX(16px)}
 
 /* FORM */
 .fg{margin-bottom:14px}
@@ -452,7 +451,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
               </div>
               <label style="position:relative;display:inline-block;width:38px;height:22px;flex-shrink:0">
                 <input type="checkbox" id="vi-multishot" style="opacity:0;width:0;height:0">
-                <span onclick="this.previousElementSibling.click()" style="position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:11px;transition:.2s" id="vi-ms-track"></span>
+                <span style="position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:11px;transition:.2s" id="vi-ms-track"></span>
               </label>
             </div>
             <div class="fg" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--card);border-radius:8px;border:1px solid var(--border);margin:0">
@@ -462,7 +461,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
               </div>
               <label style="position:relative;display:inline-block;width:38px;height:22px;flex-shrink:0">
                 <input type="checkbox" id="vi-sound" style="opacity:0;width:0;height:0">
-                <span onclick="this.previousElementSibling.click()" style="position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:11px;transition:.2s" id="vi-sound-track"></span>
+                <span style="position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:11px;transition:.2s" id="vi-sound-track"></span>
               </label>
             </div>
           </div>
@@ -536,7 +535,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
             </div>
             <label style="position:relative;display:inline-block;width:38px;height:22px;flex-shrink:0">
               <input type="checkbox" id="mc-sync-audio" checked style="opacity:0;width:0;height:0">
-              <span onclick="this.previousElementSibling.click()" style="position:absolute;cursor:pointer;inset:0;background:var(--text);border-radius:11px;transition:.2s" id="mc-sa-track"></span>
+              <span style="position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:11px;transition:.2s" id="mc-sa-track" class="vi-toggle-on"></span>
             </label>
           </div>
           <div id="mc-status" style="font-size:11px;color:var(--muted2);margin-bottom:10px;min-height:16px"></div>
@@ -916,6 +915,7 @@ function bindAll() {
   $('vi-ef-fi').addEventListener('change', e => handleViEndFrameUpload(e));
   $('vi-multishot').addEventListener('change', syncMultiShotToggle);
   $('vi-sound').addEventListener('change', () => $('vi-sound-track').classList.toggle('vi-toggle-on', $('vi-sound').checked));
+  $('mc-sync-audio').addEventListener('change', () => $('mc-sa-track').classList.toggle('vi-toggle-on', $('mc-sync-audio').checked));
   $('mc-img-fi').addEventListener('change', e => handleMcImageUpload(e));
   $('mc-vid-fi').addEventListener('change', e => handleMcVideoUpload(e));
 
@@ -1447,7 +1447,7 @@ async function genMc(mid) {
         if(syncAudio && refVideoFileSnap) {
           try {
             // Show merging status on the pending card
-            const pendEl = document.getElementById(cid);
+            const pendEl = document.getElementById('c-'+cid);
             if(pendEl) { const lbl = pendEl.querySelector('.cpend-lbl'); if(lbl) lbl.textContent = 'Merging audio…'; }
             finalUrl = await mergeAudioOntoVideo(urls[0], refVideoFileSnap);
           } catch(mergeErr) {
@@ -1481,11 +1481,11 @@ async function genSd(mid) {
   // Build input based on model — each Seedream version has different accepted params
   let input;
   if(model==='seedream/4.5-edit') {
-    // Edit model: supports reference images via image_urls
-    if(!getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings to use reference photos.');btn.disabled=false;btn.textContent='Generate';return;}
+    // Edit model: supports reference images via image_urls (optional)
     let refUrls=[];
     const refs=getRefs(mid);
     if(refs.length>0){
+      if(!getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings to use reference photos.');btn.disabled=false;btn.textContent='Generate';return;}
       try{
         btn.innerHTML='<div class="spinner"></div>Uploading refs…';
         refUrls=await getRefUrls(mid);
@@ -1497,19 +1497,18 @@ async function genSd(mid) {
     // 4.5: aspect_ratio + quality (basic/high) + nsfw_checker only
     input={prompt,aspect_ratio:ratio,quality,nsfw_checker:false};
   } else if(model==='bytedance/seedream-v4-text-to-image') {
-    // 4.0: image_size + image_resolution + max_images
+    // 4.0: image_size + image_resolution
     const sizeMap={'9:16':'portrait_16_9','16:9':'landscape_16_9','1:1':'square_hd','3:4':'portrait_4_3','4:3':'landscape_4_3'};
-    input={prompt,image_size:sizeMap[ratio]||'portrait_16_9',image_resolution:'2K',max_images:cnt,nsfw_checker:false};
+    input={prompt,image_size:sizeMap[ratio]||'portrait_16_9',image_resolution:'2K',nsfw_checker:false};
   } else {
-    // 3.0: image_size + guidance_scale
+    // 3.0: image_size
     const sizeMap={'9:16':'portrait_16_9','16:9':'landscape_16_9','1:1':'square_hd','3:4':'portrait_4_3','4:3':'landscape_4_3'};
     input={prompt,image_size:sizeMap[ratio]||'portrait_16_9'};
   }
 
   btn.innerHTML='<div class="spinner"></div>Submitting…';
-  // For 4.0/3.0 we generate all in one call (max_images handles count)
-  const batchMode = (model==='bytedance/seedream-v4-text-to-image'||model==='bytedance/seedream');
-  const loopCount = batchMode ? 1 : cnt;
+  // Always loop cnt times so each image gets its own card and is fully tracked
+  const loopCount = cnt;
 
   for(let i=0;i<loopCount;i++) {
     if(i>0) await delay(1100);
@@ -1566,8 +1565,8 @@ async function genVi(mid) {
   } catch(e){ alert('Frame upload failed: '+e.message); btn.disabled=false; btn.textContent='Generate'; return; }
 
   const isKling3 = model==='kling-3.0/video';
-  // Kling 2.6 only accepts 5s or 10s
-  const safeDur = (!isKling3 && dur==='15') ? '10' : dur;
+  // Kling 2.6 only accepts 5s or 10s — clamp any other value
+  const safeDur = isKling3 ? dur : (parseInt(dur) <= 5 ? '5' : '10');
   const viMode = $('vi-mode') ? $('vi-mode').value : 'std';
   const multiShot = $('vi-multishot').checked;
 
@@ -1656,7 +1655,8 @@ function updateBadge() {
 
 // ── ACTIONS ──
 function dlUrl(url, id) {
-  const a=document.createElement('a'); a.href=url; a.download='cuzo_'+(id||Date.now())+'.jpg'; a.target='_blank';
+  const ext = /\.(mp4|webm|mov)(\?|$)/i.test(url) ? 'mp4' : 'jpg';
+  const a=document.createElement('a'); a.href=url; a.download='cuzo_'+(id||Date.now())+'.'+ext; a.target='_blank';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 function cpUrl(url) { navigator.clipboard.writeText(url).catch(()=>alert('URL: '+url)); }
