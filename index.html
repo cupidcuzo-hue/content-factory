@@ -304,6 +304,10 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
     <div class="topbar-logo">Cuzo <span>Content Factory</span></div>
     <div class="topbar-stat"><div id="api-dot"></div><span id="api-txt">No key</span></div>
     <div class="topbar-stat">Today: <strong id="today-cost">~$0.00</strong></div>
+    <div id="cuzo-sync-chip" class="topbar-stat" style="cursor:pointer;display:none" onclick="openSettings();setTimeout(()=>document.getElementById('cuzo-url')&&document.getElementById('cuzo-url').scrollIntoView({behavior:'smooth'}),300)">
+      <div id="cuzo-sync-dot" style="width:7px;height:7px;border-radius:50%;background:var(--muted)"></div>
+      <span id="cuzo-sync-txt">Cuzo</span>
+    </div>
     <div class="topbar-spacer"></div>
     <button class="topbar-btn" id="hbtn">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>History
@@ -614,6 +618,22 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
     </div>
   </div>
   <div class="ssec">
+    <div class="ssec-title">Cuzo Operation Sync</div>
+    <div style="background:#0a0a0a;border:1px solid #1c1c1c;border-radius:8px;padding:10px 12px;font-size:11px;color:#555;line-height:1.7;margin-bottom:12px">
+      Sync your model list from <strong style="color:#888">cuzoinhouse.com</strong> so you don't have to add models twice. Models are matched by name and merged — existing reference photos are preserved.
+    </div>
+    <div class="fg">
+      <label class="fl">Cuzo Operation URL</label>
+      <input type="text" id="cuzo-url" placeholder="https://cuzoinhouse.com" autocomplete="off">
+    </div>
+    <div class="fg">
+      <label class="fl">Staff JWT Token <span>(DevTools → Application → Local Storage → cuzo_token)</span></label>
+      <div class="pw-wrap"><input type="password" id="cuzo-jwt" placeholder="eyJhbG…"><button class="pw-toggle" data-t="cuzo-jwt">&#128065;</button></div>
+    </div>
+    <button class="tbtn" id="sync-cuzo-btn" style="width:100%;margin-top:4px;text-align:center;font-size:12px">↻ Sync Models from Cuzo</button>
+    <div class="tresult" id="cuzo-tr"></div>
+  </div>
+  <div class="ssec">
     <div class="ssec-title">Models</div>
     <div id="model-list"></div>
     <button class="tbtn" id="add-model-btn" style="width:100%;margin-top:4px;text-align:center">+ Add Model</button>
@@ -825,6 +845,8 @@ function initApp() {
   buildSettingsRefs();
   renderGrid();
   updateApiDot();
+  // Auto-sync models from Cuzo Operation if credentials exist
+  if (getCuzoJwt()) syncModelsFromCuzo(false);
   // Set initial ref note for Seedream (Edit model is default)
   const isEdit=$('sd-m')&&$('sd-m').value==='seedream/4.5-edit';
   if($('sd-ref-note')){$('sd-ref-note').textContent=isEdit?'✓ sent to API as reference':'(select Edit model to use)';$('sd-ref-note').style.color=isEdit?'var(--success)':'var(--muted2)';}
@@ -879,6 +901,68 @@ function loadSettingsInputs() {
   $('kie-k').value = localStorage.getItem('cuzo_kie_key') || '';
   $('cld-cloud').value  = localStorage.getItem('cuzo_cld_cloud') || '';
   $('cld-preset').value = localStorage.getItem('cuzo_cld_preset') || '';
+  $('cuzo-url').value = localStorage.getItem('cuzo_op_url') || 'https://cuzoinhouse.com';
+  $('cuzo-jwt').value = localStorage.getItem('cuzo_op_jwt') || '';
+}
+
+// ── CUZO OPERATION SYNC ──
+function getCuzoUrl() { return (localStorage.getItem('cuzo_op_url') || 'https://cuzoinhouse.com').replace(/\/$/, ''); }
+function getCuzoJwt() { return localStorage.getItem('cuzo_op_jwt') || ''; }
+function updateCuzoSyncChip(status) {
+  const chip = $('cuzo-sync-chip');
+  const dot  = $('cuzo-sync-dot');
+  const txt  = $('cuzo-sync-txt');
+  if (!chip) return;
+  if (status === 'connected') {
+    chip.style.display = 'flex';
+    dot.style.background = 'var(--success)';
+    txt.textContent = 'Synced with Cuzo';
+  } else if (status === 'error') {
+    chip.style.display = 'flex';
+    dot.style.background = 'var(--error)';
+    txt.textContent = 'Cuzo sync failed';
+  } else {
+    chip.style.display = getCuzoJwt() ? 'flex' : 'none';
+    dot.style.background = 'var(--muted)';
+    txt.textContent = 'Cuzo (not synced)';
+  }
+}
+async function syncModelsFromCuzo(showResult) {
+  const url = getCuzoUrl();
+  const jwt = getCuzoJwt();
+  if (!jwt) {
+    if (showResult) { $('cuzo-tr').className='tresult err'; $('cuzo-tr').textContent='No JWT token — paste your cuzo_token from cuzoinhouse.com'; }
+    return;
+  }
+  if (showResult) { $('cuzo-tr').className='tresult'; $('cuzo-tr').textContent='Syncing…'; }
+  try {
+    const res = await fetch(url + '/api/models', { headers: { Authorization: 'Bearer ' + jwt } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const apiModels = Array.isArray(data) ? data : (data.models || []);
+    if (!apiModels.length) throw new Error('No models returned');
+    // Merge: match by name (case-insensitive), add new, update existing fields
+    apiModels.forEach(am => {
+      const existing = MODELS.find(m => m.name.toLowerCase() === am.name.toLowerCase());
+      const always = [am.content_dna, am.hook_style].filter(Boolean).join('. ');
+      if (existing) {
+        existing.niche = am.niche || existing.niche;
+        existing.color = am.color || existing.color;
+        if (always && !existing._manualAlways) existing.always = always;
+      } else {
+        MODELS.push({ id: am.name.toLowerCase().replace(/\s+/g,'_'), name: am.name, color: am.color || '#C9A84C', niche: am.niche || '', always: always });
+      }
+    });
+    saveModels();
+    buildModelBar();
+    renderModelManager();
+    buildSettingsRefs();
+    updateCuzoSyncChip('connected');
+    if (showResult) { $('cuzo-tr').className='tresult ok'; $('cuzo-tr').textContent=`✓ Synced ${apiModels.length} models from Cuzo`; }
+  } catch(e) {
+    updateCuzoSyncChip('error');
+    if (showResult) { $('cuzo-tr').className='tresult err'; $('cuzo-tr').textContent='Sync failed: ' + e.message; }
+  }
 }
 function saveKie() { const v=$('kie-k').value.trim(); if(v) localStorage.setItem('cuzo_kie_key',v); updateApiDot(); }
 function saveCld() {
@@ -996,6 +1080,9 @@ function bindAll() {
   $('kie-k').addEventListener('input', saveKie);
   $('cld-cloud').addEventListener('input', saveCld);
   $('cld-preset').addEventListener('input', saveCld);
+  $('cuzo-url').addEventListener('input', () => localStorage.setItem('cuzo_op_url', $('cuzo-url').value.trim()));
+  $('cuzo-jwt').addEventListener('input', () => { localStorage.setItem('cuzo_op_jwt', $('cuzo-jwt').value.trim()); updateCuzoSyncChip(); });
+  $('sync-cuzo-btn').addEventListener('click', () => syncModelsFromCuzo(true));
   $('tkie').addEventListener('click', testKie);
   $('timgbb').addEventListener('click', testIbb);
   $('savepw').addEventListener('click', () => {
