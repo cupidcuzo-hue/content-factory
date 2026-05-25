@@ -438,6 +438,12 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
                   <span style="font-size:9px;color:var(--muted2)">Upload</span>
                 </div>
                 <button type="button" id="vi-sf-clr" onclick="clearViStartFrame()" style="display:none;font-size:9px;background:transparent;border:none;color:var(--muted2);cursor:pointer;margin-top:3px;padding:0">✕ Remove</button>
+                <button type="button" id="vi-sf-refbtn" onclick="toggleViRefPicker()" style="font-size:9px;background:transparent;border:none;color:var(--gold-dim,#a07a2a);cursor:pointer;margin-top:3px;padding:0;display:block">📷 From Refs</button>
+                <div id="vi-sf-ref-picker" style="display:none;margin-top:6px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px">
+                  <div style="font-size:9px;color:var(--muted2);margin-bottom:6px">Pick a ref photo as start frame:</div>
+                  <div id="vi-sf-ref-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px"></div>
+                  <div id="vi-sf-ref-empty" style="display:none;font-size:10px;color:var(--muted2)">No ref photos yet — add them in Settings</div>
+                </div>
                 <input type="file" id="vi-sf-fi" accept="image/*" style="display:none">
               </div>
               <!-- End frame -->
@@ -486,8 +492,8 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
           <div class="fg">
             <label class="fl">Model</label>
             <select id="vi-m">
-              <option value="kling-3.0/video">Kling 3.0 (Best)</option>
-              <option value="kling-2.6/text-to-video">Kling 2.6</option>
+              <option value="kling-2.6/text-to-video" selected>Kling 2.6 (Recommended)</option>
+              <option value="kling-3.0/video">Kling 3.0 (May be unavailable)</option>
               <option value="__c">Custom…</option>
             </select>
             <input type="text" id="vi-mc" placeholder="Enter model string" style="display:none;margin-top:6px">
@@ -1456,6 +1462,40 @@ function clearViEndFrame() {
   $('vi-ef-slot').innerHTML = FRAME_EMPTY_HTML;
   $('vi-ef-slot').style.border = '1.5px dashed var(--border)';
   $('vi-ef-clr').style.display = 'none';
+}
+
+function toggleViRefPicker() {
+  const picker = $('vi-sf-ref-picker');
+  const isOpen = picker.style.display !== 'none';
+  if (isOpen) { picker.style.display = 'none'; return; }
+  const refs = getRefs(activeModel);
+  const grid = $('vi-sf-ref-grid');
+  const empty = $('vi-sf-ref-empty');
+  grid.innerHTML = '';
+  if (!refs.length) {
+    grid.style.display = 'none';
+    empty.style.display = '';
+  } else {
+    grid.style.display = 'grid';
+    empty.style.display = 'none';
+    refs.forEach((b64) => {
+      const img = document.createElement('img');
+      img.src = b64;
+      img.style.cssText = 'width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;cursor:pointer;border:2px solid transparent;transition:border-color .15s';
+      img.onmouseover = () => { img.style.borderColor = '#C9A84C'; };
+      img.onmouseout = () => { img.style.borderColor = 'transparent'; };
+      img.onclick = () => {
+        viStartFrameB64 = b64;
+        const slot = $('vi-sf-slot');
+        slot.innerHTML = `<img src="${b64}" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`;
+        slot.style.border = '1.5px solid var(--border)';
+        $('vi-sf-clr').style.display = '';
+        picker.style.display = 'none';
+      };
+      grid.appendChild(img);
+    });
+  }
+  picker.style.display = '';
 }
 
 // toggle visual sync
