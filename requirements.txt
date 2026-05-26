@@ -1,6 +1,7 @@
 flask
 flask-socketio
 eventlet
+gunicorn
 requests
 google-api-python-client
 google-auth
