@@ -295,8 +295,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
   <!-- CORS BANNER -->
   <div id="cors-banner">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-    CORS error detected — KIE.ai is blocking direct browser requests. A backend proxy may be needed. Contact your agency admin.
-    <a href="https://railway.app" target="_blank" style="color:var(--warn);margin-left:4px;text-decoration:underline">Railway deploy guide</a>
+    Backend connection issue. Image/video generation requires the Python backend to be running. Check Railway deployment status.
   </div>
 
   <!-- TOPBAR -->
@@ -309,12 +308,29 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
       <span id="cuzo-sync-txt">Cuzo</span>
     </div>
     <div class="topbar-spacer"></div>
+    <button class="topbar-btn" id="costbtn" onclick="loadCostTracker()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Costs
+    </button>
     <button class="topbar-btn" id="hbtn">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>History
     </button>
     <button class="topbar-btn" id="sbtn">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings
     </button>
+  </div>
+
+  <!-- COST TRACKER PANEL -->
+  <div id="cost-tracker" style="display:none;background:#050505;border-bottom:1px solid #1a1a1a;padding:8px 16px;font-size:11px;font-family:monospace;color:#666">
+    <span style="color:#C9A84C;font-weight:700;margin-right:12px">COST TRACKER</span>
+    <span id="ct-week-img"></span>
+    <span style="margin:0 8px;opacity:0.3">·</span>
+    <span id="ct-week-vid"></span>
+    <span style="margin:0 8px;opacity:0.3">·</span>
+    <span id="ct-total" style="color:#C9A84C"></span>
+    <span style="margin:0 8px;opacity:0.3">·</span>
+    <span id="ct-proj" style="color:#888"></span>
+    <button onclick="loadCostTracker()" style="margin-left:12px;background:none;border:1px solid #222;color:#555;font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer">↻</button>
+    <button onclick="$('cost-tracker').style.display='none'" style="margin-left:4px;background:none;border:none;color:#444;font-size:13px;cursor:pointer">✕</button>
   </div>
 
   <!-- MODEL BAR -->
@@ -591,14 +607,14 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
 <div id="spanel">
   <div class="stitle">Settings <button class="sclose" id="sclbtn">&#215;</button></div>
   <div class="ssec">
-    <div class="ssec-title">API Keys</div>
-    <div class="fg">
-      <label class="fl">KIE API Key</label>
-      <div class="pw-wrap"><input type="password" id="kie-k" placeholder="Bearer key…"><button class="pw-toggle" data-t="kie-k">&#128065;</button></div>
-      <button class="tbtn" id="tkie">Test KIE Connection</button>
-      <div class="tresult" id="kie-tr"></div>
+    <div class="ssec-title">API Status</div>
+    <div style="background:#0a0a0a;border:1px solid #1c1c1c;border-radius:8px;padding:10px 12px;font-size:11px;color:#888;line-height:1.8;margin-bottom:10px">
+      API keys are configured as <strong style="color:#aaa">server environment variables</strong> in Railway — not stored in the browser.<br>
+      Images → <strong style="color:#C9A84C">Laozhang.ai</strong> (NanoBanana Pro) &nbsp;·&nbsp; Videos → <strong style="color:#C9A84C">KIE.ai</strong> (Kling)
     </div>
-    <div class="fg">
+    <button class="tbtn" id="tapis" style="width:100%;text-align:center">⚡ Check API Connectivity</button>
+    <div class="tresult" id="api-status-tr"></div>
+    <div class="fg" style="margin-top:14px">
       <label class="fl">Cloudinary Cloud Name <span>(for ref photo uploads)</span></label>
       <input type="text" id="cld-cloud" placeholder="e.g. dxy1234567" autocomplete="off">
       <label class="fl" style="margin-top:10px">Cloudinary Upload Preset <span>(must be unsigned)</span></label>
@@ -749,7 +765,53 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
   <div id="vprompt" style="color:var(--muted2);font-size:12px;max-width:600px;text-align:center;padding:0 16px"></div>
 </div>
 
+<script src="/socket.io/socket.io.js"></script>
 <script>
+// ── SOCKET.IO ──
+const socket = io();
+const pendingJobs = new Map(); // job_id → {mid, type, prompt, model, cost}
+
+socket.on('job:complete', async ({job_id, url, cost, provider}) => {
+  const meta = pendingJobs.get(job_id);
+  if (!meta) return;
+  pendingJobs.delete(job_id);
+
+  let finalUrl = url;
+  // Motion control: merge audio onto video if requested
+  if (meta.syncAudio && meta.refVideoFile) {
+    try {
+      const pendEl = document.getElementById('c-' + job_id);
+      if (pendEl) { const lbl = pendEl.querySelector('.cpend-lbl'); if(lbl) lbl.textContent = 'Merging audio…'; }
+      finalUrl = await mergeAudioOntoVideo(url, meta.refVideoFile);
+    } catch { finalUrl = url; }
+  }
+
+  succCard(job_id, meta.mid, meta.type, finalUrl, meta.prompt, meta.model, cost);
+  saveHist({id:job_id, modelId:meta.mid, type:meta.type, prompt:meta.prompt, url:finalUrl, model:meta.model, timestamp:Date.now(), estimatedCost:cost});
+  updateCostDisplay();
+});
+
+socket.on('job:failed', ({job_id, error}) => {
+  pendingJobs.delete(job_id);
+  failCard(job_id, error || 'Generation failed');
+});
+
+socket.on('job:progress', ({job_id, status, pct}) => {
+  const el = document.getElementById('c-' + job_id);
+  if (el) {
+    const lbl = el.querySelector('.cpend-lbl');
+    if (lbl && status) lbl.textContent = status;
+  }
+});
+
+socket.on('cost:update', ({today_total}) => {
+  const el = $('today-cost');
+  if (el) el.textContent = '~$' + today_total.toFixed(2);
+});
+
+socket.on('connect', () => updateApiDot('ok'));
+socket.on('disconnect', () => updateApiDot('err'));
+
 // ── MODELS (dynamic, stored in localStorage) ──
 const DEFAULT_MODELS = [
   { id:'kim',   name:'Kim',   color:'#22C55E', niche:'Lifestyle & Fitness' },
@@ -839,7 +901,6 @@ function initGate() {
 // ── APP INIT ──
 function initApp() {
   // Pre-load credentials if not already set
-  if(!localStorage.getItem('cuzo_kie_key'))    localStorage.setItem('cuzo_kie_key',    '47b5acc50292f9b00b7da66e25dfb497');
   if(!localStorage.getItem('cuzo_cld_cloud'))  localStorage.setItem('cuzo_cld_cloud',  'duqitd5xn');
   if(!localStorage.getItem('cuzo_cld_preset')) localStorage.setItem('cuzo_cld_preset', 'cuzo_refs');
   initNotifications();
@@ -904,7 +965,6 @@ function updateMultiBtns() {
 
 // ── SETTINGS STORAGE ──
 function loadSettingsInputs() {
-  $('kie-k').value = localStorage.getItem('cuzo_kie_key') || '';
   $('cld-cloud').value  = localStorage.getItem('cuzo_cld_cloud') || '';
   $('cld-preset').value = localStorage.getItem('cuzo_cld_preset') || '';
   $('cuzo-url').value = localStorage.getItem('cuzo_op_url') || 'https://cuzoinhouse.com';
@@ -970,7 +1030,6 @@ async function syncModelsFromCuzo(showResult) {
     if (showResult) { $('cuzo-tr').className='tresult err'; $('cuzo-tr').textContent='Sync failed: ' + e.message; }
   }
 }
-function saveKie() { const v=$('kie-k').value.trim(); if(v) localStorage.setItem('cuzo_kie_key',v); updateApiDot(); }
 function saveCld() {
   const cloud=$('cld-cloud').value.trim(), preset=$('cld-preset').value.trim();
   if(cloud)  localStorage.setItem('cuzo_cld_cloud', cloud);
@@ -1083,13 +1142,21 @@ function bindAll() {
   $('sbtn').addEventListener('click', openSettings);
   $('sclbtn').addEventListener('click', closeSettings);
   $('sovlay').addEventListener('click', closeSettings);
-  $('kie-k').addEventListener('input', saveKie);
   $('cld-cloud').addEventListener('input', saveCld);
   $('cld-preset').addEventListener('input', saveCld);
   $('cuzo-url').addEventListener('input', () => localStorage.setItem('cuzo_op_url', $('cuzo-url').value.trim()));
   $('cuzo-jwt').addEventListener('input', () => { localStorage.setItem('cuzo_op_jwt', $('cuzo-jwt').value.trim()); updateCuzoSyncChip(); });
   $('sync-cuzo-btn').addEventListener('click', () => syncModelsFromCuzo(true));
-  $('tkie').addEventListener('click', testKie);
+  $('tapis').addEventListener('click', async () => {
+    const el=$('api-status-tr'); el.className='tresult'; el.textContent='Testing…';
+    try {
+      const r=await fetch('/api/test/all'); const d=await r.json();
+      const lz=d.laozhang==='ok'?'✓ Laozhang':'✗ Laozhang';
+      const ki=d.kie==='ok'?'✓ KIE':'✗ KIE';
+      el.className='tresult '+(d.all_ok?'ok':'err');
+      el.textContent=lz+' · '+ki+(d.all_ok?' — All systems go':' — Check Railway env vars');
+    } catch(e){el.className='tresult err';el.textContent='Cannot reach backend: '+e.message;}
+  });
   $('timgbb').addEventListener('click', testIbb);
   $('savepw').addEventListener('click', () => {
     const v=$('pw-new').value.trim();
@@ -1389,11 +1456,39 @@ function updateCostPreviews() {
   if($('mc-cp')) $('mc-cp').innerHTML=`Est. cost: <strong>~${f$(getCost(mcm))}</strong> per generation`;
 }
 
-function updateCostDisplay() {
-  const hist=JSON.parse(localStorage.getItem('cuzo_history')||'[]');
-  const today=new Date().toDateString();
-  const sum=hist.filter(h=>new Date(h.timestamp).toDateString()===today).reduce((s,h)=>s+(h.estimatedCost||0),0);
-  $('today-cost').textContent='~'+f$(sum);
+async function updateCostDisplay() {
+  try {
+    const r = await fetch('/api/costs/summary');
+    if (!r.ok) throw new Error('no backend');
+    const d = await r.json();
+    $('today-cost').textContent = '~$' + (d.today || 0).toFixed(2);
+  } catch {
+    // Fallback to localStorage if backend not reachable
+    const hist=JSON.parse(localStorage.getItem('cuzo_history')||'[]');
+    const today=new Date().toDateString();
+    const sum=hist.filter(h=>new Date(h.timestamp).toDateString()===today).reduce((s,h)=>s+(h.estimatedCost||0),0);
+    $('today-cost').textContent='~'+f$(sum);
+  }
+}
+
+async function loadCostTracker() {
+  const panel = $('cost-tracker');
+  panel.style.display = '';
+  try {
+    const r = await fetch('/api/costs/summary');
+    if (!r.ok) throw new Error('backend unavailable');
+    const d = await r.json();
+    $('ct-week-img').textContent  = `Images: ${d.week_images.count} → $${d.week_images.cost.toFixed(2)}`;
+    $('ct-week-vid').textContent  = `Videos: ${d.week_videos.count} → $${d.week_videos.cost.toFixed(2)}`;
+    $('ct-total').textContent     = `Week total: $${d.week.toFixed(2)}`;
+    $('ct-proj').textContent      = `~$${d.projection_monthly.toFixed(2)}/mo est.`;
+    $('today-cost').textContent   = '~$' + (d.today || 0).toFixed(2);
+  } catch(e) {
+    $('ct-week-img').textContent = 'Backend not connected';
+    $('ct-week-vid').textContent = '';
+    $('ct-total').textContent = '';
+    $('ct-proj').textContent = '';
+  }
 }
 
 function saveHist(item) {
@@ -1405,7 +1500,6 @@ function saveHist(item) {
 
 // ── GENERATION ──
 async function handleGen(type) {
-  if(!getKie()){alert('KIE API key not set. Open Settings.');return;}
   const mods = multiMode&&selectedModels.size>0 ? Array.from(selectedModels) : [activeModel];
   for(let i=0;i<mods.length;i++) {
     if(i>0) await delay(1200);
@@ -1586,113 +1680,80 @@ async function genMc(mid) {
   addPend(cid, mid, 'video', 'Motion Control', 'Motion Control', '9:16');
 
   const syncAudio = $('mc-sync-audio').checked;
-  const refVideoFileSnap = mcVideoFile; // capture reference at submit time
+  const m = MODELS.find(x=>x.id===mid);
+  pendingJobs.set(cid, {mid, type:'video', prompt:'Motion Control', model, cost, syncAudio, refVideoFile: mcVideoFile});
 
-  try {
-    const tid = await kieCreate(model, input);
-    updateApiDot('ok');
-    pollLoop(tid,
-      async urls => {
-        let finalUrl = urls[0];
-        if(syncAudio && refVideoFileSnap) {
-          try {
-            // Show merging status on the pending card
-            const pendEl = document.getElementById('c-'+cid);
-            if(pendEl) { const lbl = pendEl.querySelector('.cpend-lbl'); if(lbl) lbl.textContent = 'Merging audio…'; }
-            finalUrl = await mergeAudioOntoVideo(urls[0], refVideoFileSnap);
-          } catch(mergeErr) {
-            console.warn('Audio merge failed, using original video:', mergeErr);
-            // Fall back to original video silently
-            finalUrl = urls[0];
-          }
-        }
-        succCard(cid, mid, 'video', finalUrl, 'Motion Control', model, cost);
-        saveHist({id:cid, modelId:mid, type:'video', prompt:'Motion Control', url:finalUrl, model, timestamp:Date.now(), estimatedCost:cost});
-      },
-      err => failCard(cid, err)
-    );
-  } catch(e) {
-    if(e.name==='TypeError'||(e.message&&e.message.includes('Failed to fetch'))) showCors();
-    failCard(cid, e.message||'Submit failed');
-  }
+  fetch('/api/generate/video', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      job_id: cid,
+      prompt: 'Motion Control',
+      model,
+      mc_input_urls: [imageUrl],
+      mc_video_urls: [videoUrl],
+      mc_orientation: model!=='kling-3.0/motion-control' ? orient : null,
+      mode,
+      model_name: m?.name||mid,
+      socket_id: socket.id
+    })
+  }).catch(e=>{ pendingJobs.delete(cid); failCard(cid, e.message||'Submit failed'); });
 
   btn.disabled=false; btn.textContent='Generate Motion Control';
 }
 
 async function genSd(mid) {
   const prompt=withIdentity($('sd-p').value.trim(), mid); if(!prompt){alert('Enter a prompt.');return;}
-  const model=$('sd-m').value==='__c'?$('sd-mc').value.trim():$('sd-m').value;
-  if(!model){alert('Enter a model string.');return;}
-  const cnt=parseInt($('sd-c').value), ratio=$('sd-r').value, quality=$('sd-q').value, fmt=$('sd-f').value, neg=$('sd-n').value.trim();
-  const cost=getCost(model);
-
+  const cnt=parseInt($('sd-c').value), ratio=$('sd-r').value;
+  const cost=getCost('nano-banana-pro');
   const btn=$('sd-gen'); btn.disabled=true;
 
-  // Build input based on model — each Seedream version has different accepted params
-  let input;
-  if(model==='seedream/4.5-edit') {
-    // Edit model: supports reference images via image_urls (optional)
-    let refUrls=[];
-    const refs=getRefs(mid);
-    if(refs.length>0){
-      if(!getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings to use reference photos.');btn.disabled=false;btn.textContent='Generate';return;}
-      try{
-        btn.innerHTML='<div class="spinner"></div>Uploading refs…';
-        refUrls=await getRefUrls(mid);
-      } catch(e){alert('Ref upload failed: '+e.message);btn.disabled=false;btn.textContent='Generate';return;}
-    }
-    input={prompt,aspect_ratio:ratio,quality,nsfw_checker:false};
-    if(refUrls.length) input.image_urls=refUrls;
-  } else if(model==='seedream/4.5-text-to-image') {
-    // 4.5: aspect_ratio + quality (basic/high) + nsfw_checker only
-    input={prompt,aspect_ratio:ratio,quality,nsfw_checker:false};
-  } else if(model==='bytedance/seedream-v4-text-to-image') {
-    // 4.0: image_size + image_resolution
-    const sizeMap={'9:16':'portrait_16_9','16:9':'landscape_16_9','1:1':'square_hd','3:4':'portrait_4_3','4:3':'landscape_4_3'};
-    input={prompt,image_size:sizeMap[ratio]||'portrait_16_9',image_resolution:'2K',nsfw_checker:false};
-  } else {
-    // 3.0: image_size
-    const sizeMap={'9:16':'portrait_16_9','16:9':'landscape_16_9','1:1':'square_hd','3:4':'portrait_4_3','4:3':'landscape_4_3'};
-    input={prompt,image_size:sizeMap[ratio]||'portrait_16_9'};
+  // Upload ref photos to Cloudinary (for passing to backend)
+  let refUrls=[];
+  const refs=getRefs(mid);
+  if(refs.length>0){
+    if(!getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings to use reference photos.');btn.disabled=false;btn.textContent='Generate';return;}
+    try{
+      btn.innerHTML='<div class="spinner"></div>Uploading refs…';
+      refUrls=await getRefUrls(mid);
+    } catch(e){alert('Ref upload failed: '+e.message);btn.disabled=false;btn.textContent='Generate';return;}
   }
 
   btn.innerHTML='<div class="spinner"></div>Submitting…';
-  // Always loop cnt times so each image gets its own card and is fully tracked
-  const loopCount = cnt;
-
-  for(let i=0;i<loopCount;i++) {
+  const m=MODELS.find(x=>x.id===mid);
+  for(let i=0;i<cnt;i++){
     if(i>0) await delay(1100);
     const cid=uid(); addPend(cid,mid,'image',prompt,'Image '+(i+1)+'/'+cnt,ratio);
-    kieCreate(model,input).then(tid => {
-      updateApiDot('ok');
-      pollLoop(tid, urls=>{ succCard(cid,mid,'image',urls[0],prompt,model,cost); saveHist({id:cid,modelId:mid,type:'image',prompt,url:urls[0],model,timestamp:Date.now(),estimatedCost:cost}); }, err=>failCard(cid,err));
-    }).catch(e=>{ if(e.name==='TypeError'||(e.message&&e.message.includes('Failed to fetch'))) showCors(); failCard(cid,e.message||'Submit failed'); });
+    pendingJobs.set(cid,{mid,type:'image',prompt,model:'nano-banana-pro',cost});
+    fetch('/api/generate/image',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({job_id:cid,prompt,resolution:'2K',ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket.id})
+    }).catch(e=>{ pendingJobs.delete(cid); failCard(cid,e.message||'Submit failed'); });
   }
   btn.disabled=false; btn.textContent='Generate';
 }
 
 async function genNb(mid) {
   const prompt=withIdentity($('nb-p').value.trim(), mid); if(!prompt){alert('Enter a prompt.');return;}
-  const cnt=parseInt($('nb-c').value), ratio=$('nb-r').value, res=$('nb-res').value, fmt=$('nb-f').value;
+  const cnt=parseInt($('nb-c').value), ratio=$('nb-r').value, res=$('nb-res').value;
   const cost=getCost('nano-banana-pro');
-  const refs=getRefs(mid);
+  const btn=$('nb-gen'); btn.disabled=true;
+
+  // Upload refs if any
   let refUrls=[];
-  if(refs.length>0) {
-    if(!getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings.');return;}
-    const btn=$('nb-gen'); btn.disabled=true; btn.innerHTML='<div class="spinner"></div>Uploading refs…';
+  const refs=getRefs(mid);
+  if(refs.length>0){
+    if(!getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings.');btn.disabled=false;btn.textContent='Generate';return;}
+    btn.innerHTML='<div class="spinner"></div>Uploading refs…';
     try { refUrls=await getRefUrls(mid); } catch(e){alert('Ref upload failed: '+e.message);btn.disabled=false;btn.textContent='Generate';return;}
-    btn.disabled=false; btn.textContent='Generate';
   }
-  const btn=$('nb-gen'); btn.disabled=true; btn.innerHTML='<div class="spinner"></div>Submitting…';
-  const input={prompt,aspect_ratio:ratio,resolution:res,output_format:fmt};
-  if(refUrls.length) input.image_input=refUrls;
-  for(let i=0;i<cnt;i++) {
+
+  btn.innerHTML='<div class="spinner"></div>Submitting…';
+  const m=MODELS.find(x=>x.id===mid);
+  for(let i=0;i<cnt;i++){
     if(i>0) await delay(1100);
     const cid=uid(); addPend(cid,mid,'image',prompt,'Image '+(i+1)+'/'+cnt,ratio);
-    kieCreate('nano-banana-pro',input).then(tid => {
-      updateApiDot('ok');
-      pollLoop(tid, urls=>{ succCard(cid,mid,'image',urls[0],prompt,'nano-banana-pro',cost); saveHist({id:cid,modelId:mid,type:'image',prompt,url:urls[0],model:'nano-banana-pro',timestamp:Date.now(),estimatedCost:cost}); }, err=>failCard(cid,err));
-    }).catch(e=>{ if(e.name==='TypeError'||(e.message&&e.message.includes('Failed to fetch'))) showCors(); failCard(cid,e.message||'Submit failed'); });
+    pendingJobs.set(cid,{mid,type:'image',prompt,model:'nano-banana-pro',cost});
+    fetch('/api/generate/image',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({job_id:cid,prompt,resolution:res||'2K',ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket.id})
+    }).catch(e=>{ pendingJobs.delete(cid); failCard(cid,e.message||'Submit failed'); });
   }
   btn.disabled=false; btn.textContent='Generate';
 }
@@ -1701,45 +1762,30 @@ async function genVi(mid) {
   const prompt=withIdentity($('vi-p').value.trim(), mid); if(!prompt){alert('Enter a prompt.');return;}
   const model=$('vi-m').value==='__c'?$('vi-mc').value.trim():$('vi-m').value;
   if(!model){alert('Enter a model string.');return;}
-  const cnt=parseInt($('vi-c').value), ratio=$('vi-r').value, dur=$('vi-d').value, neg=$('vi-n').value.trim();
+  const cnt=parseInt($('vi-c').value), ratio=$('vi-r').value, dur=$('vi-d').value;
   const cost=getCost(model);
   const btn=$('vi-gen'); btn.disabled=true; btn.innerHTML='<div class="spinner"></div>Submitting…';
 
-  // Upload frames if provided
+  // Upload start frame to Cloudinary if provided
   const needUpload = viStartFrameB64 || viEndFrameB64;
   if(needUpload && !getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings to use frames.');btn.disabled=false;btn.textContent='Generate';return;}
-  let startFrameUrl=null, endFrameUrl=null;
+  let startFrameUrl=null;
   try {
     if(viStartFrameB64){ btn.innerHTML='<div class="spinner"></div>Uploading start frame…'; startFrameUrl=await uploadCld(viStartFrameB64,'vi_start_'+Date.now()); }
-    if(viEndFrameB64){   btn.innerHTML='<div class="spinner"></div>Uploading end frame…';   endFrameUrl  =await uploadCld(viEndFrameB64,  'vi_end_'+Date.now());   }
   } catch(e){ alert('Frame upload failed: '+e.message); btn.disabled=false; btn.textContent='Generate'; return; }
 
   const isKling3 = model==='kling-3.0/video';
-  // Kling 2.6 only accepts 5s or 10s — clamp any other value
-  const safeDur = isKling3 ? dur : (parseInt(dur) <= 5 ? '5' : '10');
   const viMode = $('vi-mode') ? $('vi-mode').value : 'std';
-  const multiShot = $('vi-multishot').checked;
-
-  // Build model-specific input — Kling 2.6 rejects mode/multi_shots/negative_prompt
-  const soundOn = $('vi-sound').checked;
-  const input={prompt,aspect_ratio:ratio,duration:String(safeDur),sound:soundOn};
-  if(isKling3) {
-    input.mode=viMode;
-    input.multi_shots=multiShot;
-    if(neg) input.negative_prompt=neg;
-  }
-  // image_urls: [startUrl, endUrl] — pass only defined ones
-  const frameUrls=[startFrameUrl,endFrameUrl].filter(Boolean);
-  if(frameUrls.length) input.image_urls=frameUrls;
 
   btn.innerHTML='<div class="spinner"></div>Submitting…';
-  for(let i=0;i<cnt;i++) {
+  const m=MODELS.find(x=>x.id===mid);
+  for(let i=0;i<cnt;i++){
     if(i>0) await delay(1100);
     const cid=uid(); addPend(cid,mid,'video',prompt,'Video '+(i+1)+'/'+cnt,ratio);
-    kieCreate(model,input).then(tid => {
-      updateApiDot('ok');
-      pollLoop(tid, urls=>{ succCard(cid,mid,'video',urls[0],prompt,model,cost); saveHist({id:cid,modelId:mid,type:'video',prompt,url:urls[0],model,timestamp:Date.now(),estimatedCost:cost}); }, err=>failCard(cid,err));
-    }).catch(e=>{ if(e.name==='TypeError'||(e.message&&e.message.includes('Failed to fetch'))) showCors(); failCard(cid,e.message||'Submit failed'); });
+    pendingJobs.set(cid,{mid,type:'video',prompt,model,cost});
+    fetch('/api/generate/video',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({job_id:cid,prompt,model,duration:dur,ratio,image_url:startFrameUrl,mode:isKling3?viMode:null,model_name:m?.name||mid,socket_id:socket.id})
+    }).catch(e=>{ pendingJobs.delete(cid); failCard(cid,e.message||'Submit failed'); });
   }
   btn.disabled=false; btn.textContent='Generate';
 }
@@ -1973,10 +2019,15 @@ function withIdentity(prompt, mid) {
 // ── API DOT ──
 function updateApiDot(state) {
   const dot=$('api-dot'), txt=$('api-txt');
-  if(!getKie()){dot.className='';txt.textContent='No key';return;}
-  if(state==='ok'){dot.className='ok';txt.textContent='Connected';}
-  else if(state==='err'){dot.className='err';txt.textContent='Error';}
-  else{dot.className='ok';txt.textContent='Key set';}
+  if(state==='ok'){dot.className='ok';txt.textContent='Backend connected';}
+  else if(state==='err'){dot.className='err';txt.textContent='Backend offline';}
+  else{
+    // On init, check backend health
+    fetch('/api/test/all').then(r=>r.json()).then(d=>{
+      dot.className=d.all_ok?'ok':'err';
+      txt.textContent=d.all_ok?'Backend connected':'Backend error';
+    }).catch(()=>{dot.className='err';txt.textContent='Backend offline';});
+  }
 }
 
 // ── MODEL MANAGER ──
@@ -2083,18 +2134,6 @@ function saveNewModel() {
 function openSettings() { loadSettingsInputs(); buildModelList(); buildSettingsRefs(); $('spanel').classList.add('open'); $('sovlay').classList.add('open'); }
 function closeSettings() { $('spanel').classList.remove('open'); $('sovlay').classList.remove('open'); }
 
-async function testKie() {
-  const k=$('kie-k').value.trim(); if(!k){$('kie-tr').className='tresult err';$('kie-tr').textContent='No key.';return;}
-  $('kie-tr').className='tresult';$('kie-tr').textContent='Testing…';
-  try {
-    const r=await fetch(KIE+'/recordInfo?taskId=test',{headers:{'Authorization':'Bearer '+k}});
-    if(r.status===401||r.status===403){$('kie-tr').className='tresult err';$('kie-tr').textContent='Invalid key.';}
-    else{$('kie-tr').className='tresult ok';$('kie-tr').textContent='Connection OK!';localStorage.setItem('cuzo_kie_key',k);updateApiDot('ok');}
-  } catch(e){
-    if(e.name==='TypeError'){showCors();$('kie-tr').className='tresult err';$('kie-tr').textContent='CORS error — see banner.';}
-    else{$('kie-tr').className='tresult err';$('kie-tr').textContent=e.message;}
-  }
-}
 
 async function testIbb() {
   saveCld();
