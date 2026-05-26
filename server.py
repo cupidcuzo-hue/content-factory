@@ -8,6 +8,8 @@ Cuzo Content Factory — Python Backend
 """
 
 from __future__ import annotations
+import eventlet
+eventlet.monkey_patch()
 import os, sys, json, time, io, threading, sqlite3, datetime, logging
 from concurrent.futures import ThreadPoolExecutor
 
