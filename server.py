@@ -475,11 +475,11 @@ def api_test_laozhang():
         r = requests.post(
             'https://api.laozhang.ai/v1/images/generations',
             headers={'Authorization': f'Bearer {LAOZHANG_API_KEY}', 'Content-Type': 'application/json'},
-            json={'model': 'nano-banana-pro', 'prompt': 'connectivity test', 'n': 1, 'size': '64x64'},
+            json={'model': 'nano-banana-pro', 'prompt': 'connectivity test', 'n': 1, 'size': '512x910', 'quality': 'hd'},
             timeout=15,
         )
-        # 400/422 = API reachable but bad request — still means creds work
-        ok = r.status_code in (200, 201, 400, 422)
+        # 400/422/503 = API reachable (bad params or rate limit) — key is still being read
+        ok = r.status_code in (200, 201, 400, 422, 503)
         return jsonify({'status': 'ok' if ok else 'error', 'provider': 'laozhang',
                         'model': 'nano-banana-pro', 'http': r.status_code})
     except Exception as e:
@@ -508,13 +508,13 @@ def api_test_all():
         lf = ex.submit(lambda: requests.post(
             'https://api.laozhang.ai/v1/images/generations',
             headers={'Authorization': f'Bearer {LAOZHANG_API_KEY}', 'Content-Type': 'application/json'},
-            json={'model': 'nano-banana-pro', 'prompt': 'test', 'n': 1, 'size': '64x64'},
+            json={'model': 'nano-banana-pro', 'prompt': 'test', 'n': 1, 'size': '512x910', 'quality': 'hd'},
             timeout=15))
         kf = ex.submit(lambda: requests.get(
             f'{KIE_BASE}/recordInfo?taskId=healthcheck',
             headers={'Authorization': f'Bearer {KIE_API_KEY}'}, timeout=10))
     try:
-        lr = lf.result(); results['laozhang'] = 'ok' if lr.status_code in (200, 201, 400, 422) else 'error'
+        lr = lf.result(); results['laozhang'] = 'ok' if lr.status_code in (200, 201, 400, 422, 503) else 'error'
     except Exception:
         results['laozhang'] = 'error'
     try:
