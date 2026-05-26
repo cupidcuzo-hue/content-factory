@@ -162,21 +162,20 @@ def upload_to_drive(data: bytes, filename: str, mime_type: str) -> str:
 # ── Image generation via Laozhang.ai ─────────────────────────────────────────
 
 def gen_image(job_id: str, prompt: str, resolution: str, ratio: str,
-              model_name: str, ref_urls: list, socket_id: str):
-    """Generate image via Laozhang NanoBanana Pro, upload to Drive, log cost."""
+              model_name: str, ref_urls: list, socket_id: str, model: str = 'nano-banana-pro'):
+    """Generate image via Laozhang, emit result immediately, upload to Drive in background."""
     size = IMG_SIZE_MAP.get((ratio, resolution), '1024x1820')
     cost_per = LAOZHANG_COSTS.get(resolution, 0.025)
 
-    emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Generating image via Laozhang…', 'pct': 10})
+    emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Generating…', 'pct': 10})
 
     payload = {
-        'model': 'nano-banana-pro',
+        'model': model,
         'prompt': prompt,
         'n': 1,
         'size': size,
         'quality': 'hd',
     }
-    # Include reference images if provided (API may support image_input)
     if ref_urls:
         payload['image_input'] = ref_urls
 
@@ -194,33 +193,28 @@ def gen_image(job_id: str, prompt: str, resolution: str, ratio: str,
     except Exception as e:
         log.error(f"Laozhang image gen failed [{job_id}]: {e}")
         emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'Image generation failed — Laozhang API error'})
-        return  # No fallback, no cost log
-
-    emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Downloading & uploading to Drive…', 'pct': 75})
-
-    # Download
-    try:
-        img_data = requests.get(img_url, timeout=60).content
-    except Exception as e:
-        log.error(f"Image download failed [{job_id}]: {e}")
-        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'Image generation failed — download error'})
         return
 
-    # Upload to Drive
-    date_str = datetime.date.today().strftime('%Y%m%d')
-    safe_name = model_name.replace(' ', '_').lower()
-    filename = f"{safe_name}_image_{date_str}_{job_id[:8]}.jpg"
-    drive_url = upload_to_drive(img_data, filename, 'image/jpeg')
-    final_url = drive_url or img_url  # Fall back to Laozhang URL if Drive not configured
-
-    # Log cost & emit
-    total_cost = log_cost(job_id, 'laozhang', 'nano-banana-pro', 'image', model_name, cost_per)
-
+    # Log cost & emit IMMEDIATELY — user sees result now, no waiting for Drive
+    total_cost = log_cost(job_id, 'laozhang', model, 'image', model_name, cost_per)
     emit_to(socket_id, 'job:complete', {
-        'job_id': job_id, 'url': final_url, 'cost': total_cost, 'provider': 'laozhang'
+        'job_id': job_id, 'url': img_url, 'cost': total_cost, 'provider': 'laozhang'
     })
     emit_to(socket_id, 'cost:update', {'today_total': today_total()})
     log.info(f"Image job complete [{job_id}] cost=${total_cost:.4f}")
+
+    # Drive upload in background — never blocks the user
+    if GOOGLE_SA_JSON and GOOGLE_DRIVE_FOLDER:
+        date_str = datetime.date.today().strftime('%Y%m%d')
+        safe_name = model_name.replace(' ', '_').lower()
+        filename = f"{safe_name}_image_{date_str}_{job_id[:8]}.jpg"
+        def _bg_upload(url=img_url, fname=filename):
+            try:
+                img_data = requests.get(url, timeout=60).content
+                upload_to_drive(img_data, fname, 'image/jpeg')
+            except Exception as ex:
+                log.warning(f"BG Drive upload failed [{job_id}]: {ex}")
+        threading.Thread(target=_bg_upload, daemon=True).start()
 
 
 # ── Video generation via KIE.ai ───────────────────────────────────────────────
@@ -247,7 +241,7 @@ def _kie_submit_and_poll(job_id, kie_model, payload_input, socket_id, headers):
     deadline = time.time() + 300
     poll_num = 0
     while time.time() < deadline:
-        time.sleep(5)
+        time.sleep(3 if poll_num < 20 else 5)
         try:
             pr = requests.get(
                 f'{KIE_BASE}/recordInfo?taskId={task_id}', headers=headers, timeout=15
@@ -321,9 +315,8 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
     video_url, err = _kie_submit_and_poll(job_id, kie_model, payload_input, socket_id, headers)
 
     if err and not video_url:
-        # Retry once after 30 seconds
-        log.warning(f"Video job failed [{job_id}], retrying in 30s: {err}")
-        time.sleep(30)
+        log.warning(f"Video job failed [{job_id}], retrying in 5s: {err}")
+        time.sleep(5)
         video_url, err = _kie_submit_and_poll(job_id, kie_model, payload_input, socket_id, headers)
 
     if not video_url:
@@ -331,29 +324,26 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
         emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'Video generation failed — KIE API error'})
         return
 
-    emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Uploading to Drive…', 'pct': 92})
-
-    # Download
-    vid_data = None
-    try:
-        vid_data = requests.get(video_url, timeout=120).content
-    except Exception as e:
-        log.error(f"Video download failed [{job_id}]: {e}")
-
-    # Upload to Drive
-    date_str = datetime.date.today().strftime('%Y%m%d')
-    safe_name = model_name.replace(' ', '_').lower()
-    filename = f"{safe_name}_video_{date_str}_{job_id[:8]}.mp4"
-    drive_url = upload_to_drive(vid_data, filename, 'video/mp4') if vid_data else ''
-    final_url = drive_url or video_url
-
+    # Emit IMMEDIATELY — user sees result now, no waiting for Drive
     total_cost = log_cost(job_id, 'kie', kie_model, 'video', model_name, cost_per)
-
     emit_to(socket_id, 'job:complete', {
-        'job_id': job_id, 'url': final_url, 'cost': total_cost, 'provider': 'kie'
+        'job_id': job_id, 'url': video_url, 'cost': total_cost, 'provider': 'kie'
     })
     emit_to(socket_id, 'cost:update', {'today_total': today_total()})
     log.info(f"Video job complete [{job_id}] cost=${total_cost:.4f}")
+
+    # Drive upload in background — never blocks the user
+    if GOOGLE_SA_JSON and GOOGLE_DRIVE_FOLDER:
+        date_str = datetime.date.today().strftime('%Y%m%d')
+        safe_name = model_name.replace(' ', '_').lower()
+        filename = f"{safe_name}_video_{date_str}_{job_id[:8]}.mp4"
+        def _bg_upload(url=video_url, fname=filename):
+            try:
+                vid_data = requests.get(url, timeout=120).content
+                upload_to_drive(vid_data, fname, 'video/mp4')
+            except Exception as ex:
+                log.warning(f"BG Drive upload failed [{job_id}]: {ex}")
+        threading.Thread(target=_bg_upload, daemon=True).start()
 
 
 # ── API Routes ────────────────────────────────────────────────────────────────
@@ -371,6 +361,7 @@ def api_gen_image():
         prompt=d['prompt'],
         resolution=d.get('resolution', '2K'),
         ratio=d.get('ratio', '9:16'),
+        model=d.get('model', 'nano-banana-pro'),
         model_name=d.get('model_name', 'unknown'),
         ref_urls=d.get('ref_urls', []),
         socket_id=d.get('socket_id', ''),

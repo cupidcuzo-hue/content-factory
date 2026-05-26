@@ -1343,12 +1343,10 @@ async function getRefUrls(modelId) {
   const cached = JSON.parse(localStorage.getItem('cuzo_ref_urls_'+modelId)||'[]');
   if(cached.length===refs.length) return cached;
   if(!getCldReady()) throw new Error('Cloudinary cloud name and upload preset required — add in Settings');
-  const urls = [];
-  for(let i=0;i<refs.length;i++) {
-    if(cached[i]){urls.push(cached[i]);continue;}
-    const u = await uploadCld(refs[i], modelId+'_ref_'+i+'_'+Date.now());
-    urls.push(u); await delay(300);
-  }
+  const urls = await Promise.all(refs.map((ref, i) => {
+    if(cached[i]) return Promise.resolve(cached[i]);
+    return uploadCld(ref, modelId+'_ref_'+i+'_'+Date.now());
+  }));
   localStorage.setItem('cuzo_ref_urls_'+modelId, JSON.stringify(urls));
   return urls;
 }
@@ -1515,10 +1513,7 @@ function saveHist(item) {
 // ── GENERATION ──
 async function handleGen(type) {
   const mods = multiMode&&selectedModels.size>0 ? Array.from(selectedModels) : [activeModel];
-  for(let i=0;i<mods.length;i++) {
-    if(i>0) await delay(1200);
-    await genForModel(type, mods[i]);
-  }
+  await Promise.all(mods.map(mid => genForModel(type, mid)));
 }
 
 async function genForModel(type, mid) {
@@ -1716,11 +1711,11 @@ async function genMc(mid) {
 
 async function genSd(mid) {
   const prompt=withIdentity($('sd-p').value.trim(), mid); if(!prompt){alert('Enter a prompt.');return;}
+  const model=$('sd-m').value==='__c'?($('sd-mc').value.trim()||'seedream/4.5-text-to-image'):$('sd-m').value;
   const cnt=parseInt($('sd-c').value), ratio=$('sd-r').value;
-  const cost=getCost('nano-banana-pro');
+  const cost=getCost(model);
   const btn=$('sd-gen'); btn.disabled=true;
 
-  // Upload ref photos to Cloudinary (for passing to backend)
   let refUrls=[];
   const refs=getRefs(mid);
   if(refs.length>0){
@@ -1734,11 +1729,10 @@ async function genSd(mid) {
   btn.innerHTML='<div class="spinner"></div>Submitting…';
   const m=MODELS.find(x=>x.id===mid);
   for(let i=0;i<cnt;i++){
-    if(i>0) await delay(1100);
     const cid=uid(); addPend(cid,mid,'image',prompt,'Image '+(i+1)+'/'+cnt,ratio);
-    pendingJobs.set(cid,{mid,type:'image',prompt,model:'nano-banana-pro',cost});
+    pendingJobs.set(cid,{mid,type:'image',prompt,model,cost});
     fetch('/api/generate/image',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({job_id:cid,prompt,resolution:'2K',ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
+      body:JSON.stringify({job_id:cid,prompt,model,resolution:'2K',ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
     }).catch(e=>{ pendingJobs.delete(cid); failCard(cid,e.message||'Submit failed'); });
   }
   btn.disabled=false; btn.textContent='Generate';
@@ -1762,7 +1756,6 @@ async function genNb(mid) {
   btn.innerHTML='<div class="spinner"></div>Submitting…';
   const m=MODELS.find(x=>x.id===mid);
   for(let i=0;i<cnt;i++){
-    if(i>0) await delay(1100);
     const cid=uid(); addPend(cid,mid,'image',prompt,'Image '+(i+1)+'/'+cnt,ratio);
     pendingJobs.set(cid,{mid,type:'image',prompt,model:'nano-banana-pro',cost});
     fetch('/api/generate/image',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -1794,7 +1787,6 @@ async function genVi(mid) {
   btn.innerHTML='<div class="spinner"></div>Submitting…';
   const m=MODELS.find(x=>x.id===mid);
   for(let i=0;i<cnt;i++){
-    if(i>0) await delay(1100);
     const cid=uid(); addPend(cid,mid,'video',prompt,'Video '+(i+1)+'/'+cnt,ratio);
     pendingJobs.set(cid,{mid,type:'video',prompt,model,cost});
     fetch('/api/generate/video',{method:'POST',headers:{'Content-Type':'application/json'},
