@@ -7,6 +7,7 @@ Cuzo Content Factory — Python Backend
   Storage → Google Drive
 """
 
+from __future__ import annotations
 import os, sys, json, time, io, threading, sqlite3, datetime, logging
 from concurrent.futures import ThreadPoolExecutor
 
