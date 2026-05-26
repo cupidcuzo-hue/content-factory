@@ -797,7 +797,7 @@ function initSocket() {
       }
 
       succCard(job_id, meta.mid, meta.type, finalUrl, meta.prompt, meta.model, cost);
-      saveHist({id:job_id, modelId:meta.mid, type:meta.type, prompt:meta.prompt, url:finalUrl, model:meta.model, timestamp:Date.now(), estimatedCost:cost});
+      saveHist({id:job_id, modelId:meta.mid, type:meta.type, prompt:meta.prompt, url:finalUrl, model:meta.model, ratio:meta.ratio||'9:16', timestamp:Date.now(), estimatedCost:cost});
       updateCostDisplay();
     });
 
@@ -927,6 +927,7 @@ function initApp() {
   bindAll();
   buildSettingsRefs();
   renderGrid();
+  restoreFromHistory();
   updateApiDot();
   // Auto-sync models from Cuzo Operation if credentials exist
   if (getCuzoJwt()) syncModelsFromCuzo(false);
@@ -1692,7 +1693,7 @@ async function genMc(mid) {
 
   const syncAudio = $('mc-sync-audio').checked;
   const m = MODELS.find(x=>x.id===mid);
-  pendingJobs.set(cid, {mid, type:'video', prompt:'Motion Control', model, cost, syncAudio, refVideoFile: mcVideoFile});
+  pendingJobs.set(cid, {mid, type:'video', prompt:'Motion Control', model, cost, ratio:'9:16', syncAudio, refVideoFile: mcVideoFile});
 
   fetch('/api/generate/video', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
@@ -1734,7 +1735,7 @@ async function genSd(mid) {
   for(let i=0;i<cnt;i++){
     const cid=uid(); job_ids.push(cid);
     addPend(cid,mid,'image',prompt,'Image '+(i+1)+'/'+cnt,ratio);
-    pendingJobs.set(cid,{mid,type:'image',prompt,model,cost});
+    pendingJobs.set(cid,{mid,type:'image',prompt,model,cost,ratio});
   }
   fetch('/api/generate/image/batch',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({job_ids,prompt,model,resolution:'2K',ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
@@ -1763,7 +1764,7 @@ async function genNb(mid) {
   for(let i=0;i<cnt;i++){
     const cid=uid(); job_ids.push(cid);
     addPend(cid,mid,'image',prompt,'Image '+(i+1)+'/'+cnt,ratio);
-    pendingJobs.set(cid,{mid,type:'image',prompt,model:'nano-banana-pro',cost});
+    pendingJobs.set(cid,{mid,type:'image',prompt,model:'nano-banana-pro',cost,ratio});
   }
   fetch('/api/generate/image/batch',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({job_ids,prompt,model:'nano-banana-pro',resolution:res||'2K',ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
@@ -1794,7 +1795,7 @@ async function genVi(mid) {
   const m=MODELS.find(x=>x.id===mid);
   for(let i=0;i<cnt;i++){
     const cid=uid(); addPend(cid,mid,'video',prompt,'Video '+(i+1)+'/'+cnt,ratio);
-    pendingJobs.set(cid,{mid,type:'video',prompt,model,cost});
+    pendingJobs.set(cid,{mid,type:'video',prompt,model,cost,ratio});
     fetch('/api/generate/video',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({job_id:cid,prompt,model,duration:dur,ratio,image_url:startFrameUrl,mode:isKling3?viMode:null,model_name:m?.name||mid,socket_id:socket?.id||''})
     }).catch(e=>{ pendingJobs.delete(cid); failCard(cid,e.message||'Submit failed'); });
@@ -1806,6 +1807,39 @@ async function genVi(mid) {
 function renderGrid() {
   $('empty').classList.toggle('hidden', items.length>0);
   $('ogrid').style.display = items.length>0?'':'none';
+  updateBadge();
+}
+
+function restoreFromHistory() {
+  const hist = JSON.parse(localStorage.getItem('cuzo_history')||'[]');
+  if(!hist.length) return;
+
+  // Pre-populate items so getTarget section logic works from the start
+  hist.filter(h=>h.url).forEach(h=>{
+    items.push({id:h.id, modelId:h.modelId, type:h.type, status:'success', url:h.url, prompt:h.prompt, cost:h.estimatedCost});
+  });
+
+  $('empty').classList.add('hidden');
+  $('ogrid').style.display='';
+
+  // Insert oldest-first so newest ends at top after prepend
+  hist.filter(h=>h.url).slice().reverse().forEach(h=>{
+    if($('c-'+h.id)) return; // already in DOM
+    const m=MODELS.find(x=>x.id===h.modelId)||{name:h.modelId||'?',color:'#C9A84C'};
+    const isVid=h.type==='video';
+    const ratio=h.ratio||'9:16';
+    const card=document.createElement('div');
+    card.className='gcard'+ratCls(ratio); card.id='c-'+h.id;
+    const safeUrl=(h.url||'').replace(/'/g,"\\'");
+    const media=isVid
+      ?`<video src="${h.url}" loop muted playsinline></video>`
+      :`<img src="${h.url}" loading="lazy" alt="">`;
+    card.innerHTML=`${media}<div class="cbadge" style="color:${m.color}">${esc(m.name)}</div><div class="ctype">${isVid?'Video':'Image'}</div><div class="covlay"><div class="covprompt">${esc(h.prompt||'')}</div><div class="covact"><button class="covbtn" onclick="dlUrl('${safeUrl}','${h.id}')">Download</button><button class="covbtn" onclick="cpUrl('${safeUrl}')">Copy URL</button><span class="covcost">~${f$(h.estimatedCost||0)}</span></div></div>`;
+    if(isVid){const v=card.querySelector('video');card.addEventListener('mouseenter',()=>v.play());card.addEventListener('mouseleave',()=>{v.pause();v.currentTime=0;});}
+    const target=getTarget(h.modelId);
+    target.insertBefore(card,target.firstChild);
+  });
+
   updateBadge();
 }
 
