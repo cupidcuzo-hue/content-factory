@@ -33,7 +33,7 @@ DB_PATH              = os.environ.get('DB_PATH', 'data/content_factory.db')
 
 # ── Flask / SocketIO ──────────────────────────────────────────────────────────
 
-app = Flask(__name__, static_folder='.', static_url_path='')
+app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'cuzo-cf-secret-2025')
 socketio = SocketIO(app, cors_allowed_origins='*', async_mode='eventlet')
 
