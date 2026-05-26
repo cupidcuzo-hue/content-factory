@@ -217,6 +217,67 @@ def gen_image(job_id: str, prompt: str, resolution: str, ratio: str,
         threading.Thread(target=_bg_upload, daemon=True).start()
 
 
+def gen_image_batch(job_ids: list, prompt: str, resolution: str, ratio: str,
+                    model_name: str, ref_urls: list, socket_id: str, model: str = 'nano-banana-pro'):
+    """One Laozhang call with n=len(job_ids) — fastest possible batch image generation."""
+    n = len(job_ids)
+    size = IMG_SIZE_MAP.get((ratio, resolution), '1024x1820')
+    cost_per = LAOZHANG_COSTS.get(resolution, 0.025)
+
+    for jid in job_ids:
+        emit_to(socket_id, 'job:progress', {'job_id': jid, 'status': f'Generating {n} images…', 'pct': 10})
+
+    payload = {
+        'model': model,
+        'prompt': prompt,
+        'n': n,
+        'size': size,
+        'quality': 'hd',
+    }
+    if ref_urls:
+        payload['image_input'] = ref_urls
+
+    try:
+        r = requests.post(
+            'https://api.laozhang.ai/v1/images/generations',
+            headers={'Authorization': f'Bearer {LAOZHANG_API_KEY}', 'Content-Type': 'application/json'},
+            json=payload,
+            timeout=180,
+        )
+        r.raise_for_status()
+        data = r.json()
+        img_urls = [item['url'] for item in data['data']]
+        log.info(f"Laozhang batch ready [{job_ids[0]}…]: {n} images")
+    except Exception as e:
+        log.error(f"Laozhang batch gen failed: {e}")
+        for jid in job_ids:
+            emit_to(socket_id, 'job:failed', {'job_id': jid, 'error': 'Image generation failed — Laozhang API error'})
+        return
+
+    date_str = datetime.date.today().strftime('%Y%m%d')
+    safe_name = model_name.replace(' ', '_').lower()
+
+    for job_id, img_url in zip(job_ids, img_urls):
+        total_cost = log_cost(job_id, 'laozhang', model, 'image', model_name, cost_per)
+        emit_to(socket_id, 'job:complete', {
+            'job_id': job_id, 'url': img_url, 'cost': total_cost, 'provider': 'laozhang'
+        })
+        log.info(f"Batch image complete [{job_id}] cost=${total_cost:.4f}")
+
+    emit_to(socket_id, 'cost:update', {'today_total': today_total()})
+
+    # Drive uploads in background
+    if GOOGLE_SA_JSON and GOOGLE_DRIVE_FOLDER:
+        def _bg_batch(pairs=list(zip(job_ids, img_urls))):
+            for jid, url in pairs:
+                try:
+                    img_data = requests.get(url, timeout=60).content
+                    upload_to_drive(img_data, f"{safe_name}_image_{date_str}_{jid[:8]}.jpg", 'image/jpeg')
+                except Exception as ex:
+                    log.warning(f"BG Drive upload failed [{jid}]: {ex}")
+        threading.Thread(target=_bg_batch, daemon=True).start()
+
+
 # ── Video generation via KIE.ai ───────────────────────────────────────────────
 
 def _kie_submit_and_poll(job_id, kie_model, payload_input, socket_id, headers):
@@ -368,6 +429,24 @@ def api_gen_image():
     ))
     t.start()
     return jsonify({'ok': True, 'job_id': d['job_id']})
+
+
+@app.route('/api/generate/image/batch', methods=['POST'])
+def api_gen_image_batch():
+    """Batch endpoint: one Laozhang call with n=count instead of N separate calls."""
+    d = request.get_json(force=True)
+    t = threading.Thread(target=gen_image_batch, daemon=True, kwargs=dict(
+        job_ids=d['job_ids'],
+        prompt=d['prompt'],
+        resolution=d.get('resolution', '2K'),
+        ratio=d.get('ratio', '9:16'),
+        model=d.get('model', 'nano-banana-pro'),
+        model_name=d.get('model_name', 'unknown'),
+        ref_urls=d.get('ref_urls', []),
+        socket_id=d.get('socket_id', ''),
+    ))
+    t.start()
+    return jsonify({'ok': True, 'job_ids': d['job_ids']})
 
 
 @app.route('/api/generate/video', methods=['POST'])
