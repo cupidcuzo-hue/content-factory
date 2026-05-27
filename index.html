@@ -439,36 +439,6 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
           <button class="gen-btn" id="sd-gen">Generate</button>
         </div>
 
-        <!-- NANOBANANA -->
-        <div id="snb" style="display:none">
-          <div class="info-chip">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            <span style="color:var(--muted);font-size:10px">Model:</span> nano-banana-pro
-          </div>
-          <div class="fg">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-              <label class="fl" style="margin:0">Reference Photos <span id="nb-rc">(0/8)</span></label>
-            </div>
-            <div id="nb-rg" class="refs-grid"></div>
-            <button class="upload-btn" id="nb-up">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Upload Reference Photos (max 8)
-            </button>
-            <input type="file" id="nb-fi" accept="image/jpeg,image/png,image/webp" multiple style="display:none">
-            <div id="nb-rw" style="display:none;color:var(--warn);font-size:10px;margin-top:6px">Cloudinary not configured — add Cloud Name &amp; Upload Preset in Settings.</div>
-          </div>
-          <div class="fg"><label class="fl">Prompt</label><textarea id="nb-p" placeholder="Describe the image in detail…"></textarea></div>
-          <div class="row2">
-            <div class="fg"><label class="fl">Aspect Ratio</label><select id="nb-r"><option value="9:16">9:16</option><option value="4:5">4:5</option><option value="1:1">1:1</option><option value="16:9">16:9</option></select></div>
-            <div class="fg"><label class="fl">Resolution</label><select id="nb-res"><option value="2K">2K</option><option value="4K">4K</option></select></div>
-          </div>
-          <div class="row2">
-            <div class="fg"><label class="fl">Count</label><select id="nb-c"><option value="1">1</option><option value="2">2</option><option value="4" selected>4</option><option value="6">6</option></select></div>
-            <div class="fg"><label class="fl">Format</label><select id="nb-f"><option value="jpg">JPG</option><option value="png">PNG</option></select></div>
-          </div>
-          <div class="cost-prev" id="nb-cp"></div>
-          <button class="gen-btn" id="nb-gen">Generate</button>
-        </div>
       </div>
 
       <!-- VIDEO TAB -->
@@ -939,7 +909,6 @@ const COSTS = {
 // ── STATE ──
 let activeModel = 'kim';
 let activeTab = 'images';
-let activeSub = 'sd';
 let multiMode = false;
 let selectedModels = new Set(['kim']);
 let items = [];
@@ -956,7 +925,6 @@ function setImageProvider(p) {
   $('kie-img-opts').style.display = p === 'kie' ? '' : 'none';
   // ssd always visible — it's the universal image panel now (NanoBanana merged in)
   $('ssd').style.display = '';
-  if ($('snb')) $('snb').style.display = 'none';  // NanoBanana tab eliminated
   // When KIE: hide the Laozhang model row (KIE has its own picker above)
   if ($('sd-model-row')) $('sd-model-row').style.display = p === 'kie' ? 'none' : '';
   // Update ref note based on current model + provider
@@ -1099,8 +1067,8 @@ function onChipClick(id, el) {
 
 function updateMultiBtns() {
   const n = selectedModels.size;
-  const defaultLabels = {'sd-gen':'Generate','nb-gen':'Generate','vi-gen':'Generate','mc-gen':'Generate Motion Control'};
-  ['sd-gen','nb-gen','vi-gen','mc-gen'].forEach(bid => {
+  const defaultLabels = {'sd-gen':'Generate','vi-gen':'Generate','mc-gen':'Generate Motion Control'};
+  ['sd-gen','vi-gen','mc-gen'].forEach(bid => {
     const b = $(bid); if(!b) return;
     if (multiMode && n > 1) { b.textContent=`Generate for ${n} Models`; b.classList.add('multi'); }
     else { b.textContent=defaultLabels[bid]||'Generate'; b.classList.remove('multi'); }
@@ -1191,15 +1159,6 @@ function bindAll() {
     updateCostPreviews();
   }));
 
-  // Image sub tabs (Seedream / NanoBanana)
-  document.querySelectorAll('.stab[data-s]').forEach(t => t.addEventListener('click', () => {
-    activeSub = t.dataset.s;
-    document.querySelectorAll('.stab[data-s]').forEach(x=>x.classList.remove('active')); t.classList.add('active');
-    $('ssd').style.display = activeSub==='sd'?'':'none';
-    $('snb').style.display = activeSub==='nb'?'':'none';
-    refreshRefGrids(); updateCostPreviews();
-  }));
-
   // Video sub tabs (Text to Video / Motion Control)
   let activeVidSub = 'txt';
   document.querySelectorAll('.stab[data-vs]').forEach(t => t.addEventListener('click', () => {
@@ -1221,7 +1180,6 @@ function bindAll() {
 
   // Cost preview triggers
   ['sd-c','sd-m','sd-q'].forEach(id => $(id)&&$(id).addEventListener('change',updateCostPreviews));
-  ['nb-c','nb-res'].forEach(id => $(id)&&$(id).addEventListener('change',updateCostPreviews));
   ['vi-c','vi-m','vi-d'].forEach(id => $(id)&&$(id).addEventListener('change',updateCostPreviews));
 
   // Motion control file slots
@@ -1235,18 +1193,16 @@ function bindAll() {
 
   // Generate buttons
   $('sd-gen').addEventListener('click', () => handleGen('sd'));
-  $('nb-gen').addEventListener('click', () => handleGen('nb'));
   $('vi-gen').addEventListener('click', () => handleGen('vi'));
   $('mc-gen').addEventListener('click', () => handleGen('mc'));
 
   // Cmd/Ctrl+Enter
-  ['sd-p','nb-p','vi-p'].forEach(id => {
+  ['sd-p','vi-p'].forEach(id => {
     const el = $(id); if(!el) return;
     el.addEventListener('keydown', e => {
       if ((e.metaKey||e.ctrlKey) && e.key==='Enter') {
         e.preventDefault();
-        if(activeTab==='images'&&activeSub==='sd') handleGen('sd');
-        else if(activeTab==='images'&&activeSub==='nb') handleGen('nb');
+        if(activeTab==='images') handleGen('sd');
         else if(activeTab==='video') handleGen('vi');
       }
     });
@@ -1255,10 +1211,6 @@ function bindAll() {
   // Seedream refs
   $('sd-up').addEventListener('click', () => $('sd-fi').click());
   $('sd-fi').addEventListener('change', handleRefUpload);
-
-  // NanoBanana refs
-  $('nb-up').addEventListener('click', () => $('nb-fi').click());
-  $('nb-fi').addEventListener('change', handleRefUpload);
 
   // Multi mode
   $('multibtn').addEventListener('click', toggleMulti);
@@ -1312,7 +1264,7 @@ function bindAll() {
   $('clrrefall').addEventListener('click', () => {
     if(confirm('Clear all reference photos?')){
       MODELS.forEach(m=>{localStorage.removeItem('cuzo_refs_'+m.id);localStorage.removeItem('cuzo_ref_urls_'+m.id);});
-      refreshNbRefs(); buildSettingsRefs();
+      refreshRefGrids(); buildSettingsRefs();
     }
   });
 
@@ -1501,23 +1453,8 @@ function refreshRefGrids() {
     $('sd-rw').style.display='none'; // Seedream refs are visual-only, no upload needed
   }
 
-  // NanoBanana refs grid
-  const nbg = $('nb-rg');
-  if (nbg) {
-    nbg.innerHTML = '';
-    refs.forEach((b64,i) => {
-      const w = document.createElement('div'); w.className='rthumb-wrap';
-      w.innerHTML=`<img src="${b64}" class="rthumb"><div class="rdel">&#215;</div>`;
-      w.querySelector('.rdel').addEventListener('click',()=>{deleteRef(activeModel,i);});
-      nbg.appendChild(w);
-    });
-    $('nb-rc').textContent=`(${refs.length}/8)`;
-    $('nb-rw').style.display=noKey?'':'none';
-  }
 }
 
-// keep old name as alias so existing calls still work
-function refreshNbRefs() { refreshRefGrids(); }
 
 function deleteRef(mid,idx) {
   const refs=getRefs(mid); refs.splice(idx,1); saveRefs(mid,refs);
@@ -1591,13 +1528,10 @@ function updateCostPreviews() {
     const kc=getKieImgCost(km);
     const label=`Est. cost: <strong>~${f$(kc*imgCnt)}</strong> for ${imgCnt} image${imgCnt>1?'s':''}`;
     if($('sd-cp')) $('sd-cp').innerHTML=label;
-    if($('nb-cp')) $('nb-cp').innerHTML=label;
   } else {
     const sdm=$('sd-m').value==='__c'?($('sd-mc').value||'seedream/4.5-text-to-image'):$('sd-m').value;
     const sdc=parseInt($('sd-c').value)||4;
     if($('sd-cp')) $('sd-cp').innerHTML=`Est. cost: <strong>~${f$(getCost(sdm)*sdc)}</strong> for ${sdc} image${sdc>1?'s':''}`;
-    const nbc=parseInt($('nb-c').value)||4;
-    if($('nb-cp')) $('nb-cp').innerHTML=`Est. cost: <strong>~${f$(getCost('nano-banana-pro')*nbc)}</strong> for ${nbc} image${nbc>1?'s':''}`;
   }
 
   const vim = videoProvider === 'laozhang'
@@ -1660,7 +1594,6 @@ async function handleGen(type) {
 
 async function genForModel(type, mid) {
   if(type==='sd') await genSd(mid);
-  else if(type==='nb') await genNb(mid);
   else if(type==='mc') await genMc(mid);
   else await genVi(mid);
 }
@@ -1877,38 +1810,9 @@ async function genSd(mid) {
     pendingJobs.set(cid,{mid,type:'image',prompt,model,cost,ratio});
   }
   const kieModel = imageProvider==='kie' ? (($('kie-img-m')||{}).value||'kolors') : null;
+  const res = ($('sd-q').value === 'high') ? '4K' : '2K';
   fetch('/api/generate/image/batch',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({job_ids,prompt,provider:imageProvider,model:kieModel||model,resolution:'2K',ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
-  }).catch(e=>{ job_ids.forEach(cid=>{pendingJobs.delete(cid);failCard(cid,e.message||'Submit failed');}); });
-  btn.disabled=false; btn.textContent='Generate';
-}
-
-async function genNb(mid) {
-  const prompt=withIdentity($('nb-p').value.trim(), mid); if(!prompt){alert('Enter a prompt.');return;}
-  const cnt=parseInt($('nb-c').value), ratio=$('nb-r').value, res=$('nb-res').value;
-  const cost=getCost('nano-banana-pro');
-  const btn=$('nb-gen'); btn.disabled=true;
-
-  // Upload refs if any
-  let refUrls=[];
-  const refs=getRefs(mid);
-  if(refs.length>0){
-    if(!getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings.');btn.disabled=false;btn.textContent='Generate';return;}
-    btn.innerHTML='<div class="spinner"></div>Uploading refs…';
-    try { refUrls=await getRefUrls(mid); } catch(e){alert('Ref upload failed: '+e.message);btn.disabled=false;btn.textContent='Generate';return;}
-  }
-
-  btn.innerHTML='<div class="spinner"></div>Submitting…';
-  const m=MODELS.find(x=>x.id===mid);
-  const job_ids=[];
-  for(let i=0;i<cnt;i++){
-    const cid=uid(); job_ids.push(cid);
-    addPend(cid,mid,'image',prompt,'Image '+(i+1)+'/'+cnt,ratio);
-    pendingJobs.set(cid,{mid,type:'image',prompt,model:'nano-banana-pro',cost,ratio});
-  }
-  const kieModelNb = imageProvider==='kie' ? (($('kie-img-m')||{}).value||'kolors') : null;
-  fetch('/api/generate/image/batch',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({job_ids,prompt,provider:imageProvider,model:kieModelNb||'nano-banana-pro',resolution:res||'2K',ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
+    body:JSON.stringify({job_ids,prompt,provider:imageProvider,model:kieModel||model,resolution:res,ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
   }).catch(e=>{ job_ids.forEach(cid=>{pendingJobs.delete(cid);failCard(cid,e.message||'Submit failed');}); });
   btn.disabled=false; btn.textContent='Generate';
 }
