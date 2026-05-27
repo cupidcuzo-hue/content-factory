@@ -102,6 +102,16 @@ init_db()
 
 LAOZHANG_COSTS = {'1K': 0.0125, '2K': 0.025, '4K': 0.050}
 
+# Per-model cost overrides for Laozhang (for models that aren't resolution-priced)
+LAOZHANG_MODEL_COSTS = {
+    'grok-2-aurora':           0.070,
+    'imagen-3.0-generate-002': 0.050,
+    'flux-1.1-pro':            0.050,
+    'flux-1-dev':              0.030,
+    'flux-1-schnell':          0.010,
+    'dall-e-3':                0.080,
+}
+
 KIE_IMAGE_COSTS = {
     'kolors':                  0.030,
     'kolors-virtual-try-on':   0.050,
@@ -213,7 +223,7 @@ def gen_image(job_id: str, prompt: str, resolution: str, ratio: str,
               model_name: str, ref_urls: list, socket_id: str, model: str = 'nano-banana-pro'):
     """Generate image via Laozhang, emit result immediately, upload to Drive in background."""
     size = IMG_SIZE_MAP.get((ratio, resolution), '1024x1820')
-    cost_per = LAOZHANG_COSTS.get(resolution, 0.025)
+    cost_per = LAOZHANG_MODEL_COSTS.get(model, LAOZHANG_COSTS.get(resolution, 0.025))
 
     emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Generating…', 'pct': 10})
 
@@ -270,7 +280,7 @@ def gen_image_batch(job_ids: list, prompt: str, resolution: str, ratio: str,
     """One Laozhang call with n=len(job_ids) — fastest possible batch image generation."""
     n = len(job_ids)
     size = IMG_SIZE_MAP.get((ratio, resolution), '1024x1820')
-    cost_per = LAOZHANG_COSTS.get(resolution, 0.025)
+    cost_per = LAOZHANG_MODEL_COSTS.get(model, LAOZHANG_COSTS.get(resolution, 0.025))
 
     for jid in job_ids:
         emit_to(socket_id, 'job:progress', {'job_id': jid, 'status': f'Generating {n} images…', 'pct': 10})

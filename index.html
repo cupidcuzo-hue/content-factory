@@ -375,16 +375,11 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
             </select>
           </div>
         </div>
-        <div class="stabs" id="img-stabs">
-          <div class="stab active" data-s="sd">Seedream</div>
-          <div class="stab" data-s="nb">NanoBanana</div>
-        </div>
-
-        <!-- SEEDREAM -->
+        <!-- MAIN IMAGE PANEL (always shown, model controls which API is used) -->
         <div id="ssd">
           <div class="fg">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-              <label class="fl" style="margin:0">Reference Photos <span id="sd-rc">(0/8)</span> <span id="sd-ref-note" style="color:var(--muted2)">(select Edit model to use)</span></label>
+              <label class="fl" style="margin:0">Reference Photos <span id="sd-rc">(0/8)</span> <span id="sd-ref-note" style="color:var(--muted2)"></span></label>
             </div>
             <div id="sd-rg" class="refs-grid"></div>
             <button class="upload-btn" id="sd-up">
@@ -405,10 +400,29 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
           <div class="fg" id="sd-model-row">
             <label class="fl">Model</label>
             <select id="sd-m">
-              <option value="seedream/4.5-edit">Seedream 4.5 Edit ✦ refs</option>
-              <option value="seedream/4.5-text-to-image">Seedream 4.5 Text-only</option>
-              <option value="bytedance/seedream-v4-text-to-image">Seedream 4.0</option>
-              <option value="bytedance/seedream">Seedream 3.0</option>
+              <optgroup label="Seedream (Laozhang)">
+                <option value="seedream/4.5-edit">Seedream 4.5 Edit ✦ refs</option>
+                <option value="seedream/4.5-text-to-image">Seedream 4.5 Text</option>
+                <option value="bytedance/seedream-v4-text-to-image">Seedream 4.0</option>
+                <option value="bytedance/seedream">Seedream 3.0</option>
+              </optgroup>
+              <optgroup label="NanoBanana (Laozhang)">
+                <option value="nano-banana-pro">NanoBanana Pro ⚡</option>
+              </optgroup>
+              <optgroup label="Grok (xAI)">
+                <option value="grok-2-aurora">Grok Aurora</option>
+              </optgroup>
+              <optgroup label="Google">
+                <option value="imagen-3.0-generate-002">Gemini Imagen 3</option>
+              </optgroup>
+              <optgroup label="Flux (Black Forest Labs)">
+                <option value="flux-1.1-pro">Flux 1.1 Pro</option>
+                <option value="flux-1-dev">Flux Dev</option>
+                <option value="flux-1-schnell">Flux Schnell ⚡ (Fastest)</option>
+              </optgroup>
+              <optgroup label="OpenAI">
+                <option value="dall-e-3">DALL-E 3</option>
+              </optgroup>
               <option value="__c">Custom…</option>
             </select>
             <input type="text" id="sd-mc" placeholder="Enter model string" style="display:none;margin-top:6px">
@@ -887,18 +901,39 @@ function saveModels() {
 
 // ── COST ESTIMATES ──
 const COSTS = {
-  'seedream/4.5-edit':                  0.06,
-  'seedream/4.5-text-to-image':         0.05,
-  'bytedance/seedream-v4-text-to-image': 0.04,
-  'bytedance/seedream':                  0.02,
-  'nano-banana-pro':                    0.08,
-  'kling-3.0/video':                    0.35,
-  'kling-2.6/text-to-video':            0.25,
-  'kling-3.0/motion-control':           0.50,
-  'kling-2.6/motion-control':           0.35,
-  'wan2.1-14b-720p':                    0.15,
-  'wan2.1-14b-480p':                    0.08,
-  'wan2.1-i2v-14b-720p':                0.18,
+  // ── Seedream via Laozhang ──
+  'seedream/4.5-edit':                   0.060,
+  'seedream/4.5-text-to-image':          0.050,
+  'bytedance/seedream-v4-text-to-image': 0.040,
+  'bytedance/seedream':                  0.020,
+  // ── NanoBanana via Laozhang ──
+  'nano-banana-pro':                     0.080,
+  // ── Grok via Laozhang ──
+  'grok-2-aurora':                       0.070,
+  // ── Google via Laozhang ──
+  'imagen-3.0-generate-002':             0.050,
+  // ── Flux via Laozhang ──
+  'flux-1.1-pro':                        0.050,
+  'flux-1-dev':                          0.030,
+  'flux-1-schnell':                      0.010,
+  // ── OpenAI via Laozhang ──
+  'dall-e-3':                            0.080,
+  // ── KIE image ──
+  'kolors':                              0.030,
+  'kling-image/v1-standard':             0.035,
+  'kling-image/v1-pro':                  0.060,
+  // ── KIE video ──
+  'kling/v2-1-standard':                 0.125,
+  'kling/v2-1-pro':                      0.250,
+  'kling/v2-1-master':                   0.800,
+  'kling-3.0/video':                     0.350,
+  'kling-2.6/text-to-video':             0.250,
+  'kling-3.0/motion-control':            0.500,
+  'kling-2.6/motion-control':            0.350,
+  // ── Laozhang video ──
+  'wan2.1-14b-720p':                     0.150,
+  'wan2.1-14b-480p':                     0.080,
+  'wan2.1-i2v-14b-720p':                 0.180,
 };
 
 // ── STATE ──
@@ -917,22 +952,34 @@ function setImageProvider(p) {
   imageProvider = p;
   $('src-lz').classList.toggle('active', p === 'laozhang');
   $('src-kie').classList.toggle('active', p === 'kie');
-  // KIE model dropdown — shown when KIE selected
+  // KIE image-specific model dropdown
   $('kie-img-opts').style.display = p === 'kie' ? '' : 'none';
-  // Sub-tabs (Seedream / NanoBanana) only apply to Laozhang
-  $('img-stabs').style.display = p === 'kie' ? 'none' : '';
-  // Always show ssd (prompt, count, ratio, generate button)
-  // When KIE: hide the Laozhang model selector inside ssd; NanoBanana stays hidden
-  if (p === 'kie') {
-    $('ssd').style.display = '';
-    $('snb').style.display = 'none';
-    if ($('sd-model-row')) $('sd-model-row').style.display = 'none';
-  } else {
-    $('ssd').style.display = activeSub === 'sd' ? '' : 'none';
-    $('snb').style.display = activeSub === 'nb' ? '' : 'none';
-    if ($('sd-model-row')) $('sd-model-row').style.display = '';
-  }
+  // ssd always visible — it's the universal image panel now (NanoBanana merged in)
+  $('ssd').style.display = '';
+  if ($('snb')) $('snb').style.display = 'none';  // NanoBanana tab eliminated
+  // When KIE: hide the Laozhang model row (KIE has its own picker above)
+  if ($('sd-model-row')) $('sd-model-row').style.display = p === 'kie' ? 'none' : '';
+  // Update ref note based on current model + provider
+  _updateRefNote();
   updateCostPreviews();
+}
+
+function _updateRefNote() {
+  const note = $('sd-ref-note'); if (!note) return;
+  const m = ($('sd-m') || {}).value || '';
+  if (imageProvider === 'kie') {
+    note.textContent = '(optional — ref support varies by KIE model)';
+    note.style.color = 'var(--muted2)';
+  } else if (m === 'seedream/4.5-edit') {
+    note.textContent = '✓ sent to API as reference';
+    note.style.color = 'var(--success,#4caf50)';
+  } else if (m.startsWith('seedream') || m.startsWith('bytedance/seedream')) {
+    note.textContent = '(Edit model required to use refs)';
+    note.style.color = 'var(--muted2)';
+  } else {
+    note.textContent = '(optional — may be used as style guide)';
+    note.style.color = 'var(--muted2)';
+  }
 }
 
 function setVideoProvider(p) {
@@ -1013,9 +1060,7 @@ function initApp() {
   updateApiDot();
   // Auto-sync models from Cuzo Operation if credentials exist
   if (getCuzoJwt()) syncModelsFromCuzo(false);
-  // Set initial ref note for Seedream (Edit model is default)
-  const isEdit=$('sd-m')&&$('sd-m').value==='seedream/4.5-edit';
-  if($('sd-ref-note')){$('sd-ref-note').textContent=isEdit?'✓ sent to API as reference':'(select Edit model to use)';$('sd-ref-note').style.color=isEdit?'var(--success)':'var(--muted2)';}
+  _updateRefNote();
 }
 
 // ── MODEL BAR ──
@@ -1168,9 +1213,7 @@ function bindAll() {
   // Custom model toggles
   $('sd-m').addEventListener('change', () => {
     $('sd-mc').style.display=$('sd-m').value==='__c'?'':'none';
-    const isEdit=$('sd-m').value==='seedream/4.5-edit';
-    $('sd-ref-note').textContent=isEdit?'✓ sent to API as reference':'(select Edit model to use)';
-    $('sd-ref-note').style.color=isEdit?'var(--success)':'var(--muted2)';
+    _updateRefNote();
     updateCostPreviews();
   });
   $('vi-m').addEventListener('change', () => { $('vi-mc').style.display=$('vi-m').value==='__c'?'':'none'; updateCostPreviews(); });
@@ -1557,9 +1600,11 @@ function updateCostPreviews() {
     if($('nb-cp')) $('nb-cp').innerHTML=`Est. cost: <strong>~${f$(getCost('nano-banana-pro')*nbc)}</strong> for ${nbc} image${nbc>1?'s':''}`;
   }
 
-  const vim=$('vi-m').value==='__c'?($('vi-mc').value||'kling-3.0/video'):$('vi-m').value;
+  const vim = videoProvider === 'laozhang'
+    ? (($('lz-vid-m')||{}).value||'wan2.1-14b-720p')
+    : ($('vi-m').value==='__c'?($('vi-mc').value||'kling-3.0/video'):$('vi-m').value);
   const vic=parseInt($('vi-c').value)||3;
-  $('vi-cp').innerHTML=`Est. cost: <strong>~${f$(getCost(vim)*vic)}</strong> for ${vic} video${vic>1?'s':''}`;
+  if($('vi-cp')) $('vi-cp').innerHTML=`Est. cost: <strong>~${f$(getCost(vim)*vic)}</strong> for ${vic} video${vic>1?'s':''}`;
 
   const mcm=$('mc-m').value==='__c'?($('mc-mc').value||'kling-3.0/motion-control'):$('mc-m').value;
   if($('mc-cp')) $('mc-cp').innerHTML=`Est. cost: <strong>~${f$(getCost(mcm))}</strong> per generation`;
