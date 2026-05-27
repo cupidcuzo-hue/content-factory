@@ -1,8 +1,8 @@
 """
 Cuzo Content Factory — Python Backend
-  Images → Laozhang.ai (nano-banana-pro)
+  Images → Laozhang.ai (nano-banana-pro / seedream)
   Videos → KIE.ai (Kling 2.6 / 3.0 / v2-1)
-  Cost tracking → SQLite
+  Cost tracking → SQLite (with /tmp fallback)
   Real-time progress → Socket.io
   Storage → Google Drive
 """
