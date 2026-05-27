@@ -992,7 +992,7 @@ function tryGate() {
   const v = document.getElementById('gi').value;
   const correct = localStorage.getItem('cuzo_password') || 'Cuzo.123';
   if (v === correct) {
-    sessionStorage.setItem('cuzo_auth','1');
+    localStorage.setItem('cuzo_auth','1');
     document.getElementById('gate').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
     initApp();
@@ -1006,7 +1006,7 @@ function tryGate() {
 }
 
 function initGate() {
-  if (sessionStorage.getItem('cuzo_auth') === '1') {
+  if (localStorage.getItem('cuzo_auth') === '1') {
     document.getElementById('gate').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
     initApp();
