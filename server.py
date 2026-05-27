@@ -225,7 +225,7 @@ def upload_to_drive(data: bytes, filename: str, mime_type: str) -> str:
 
 # ── Image generation via Laozhang.ai ─────────────────────────────────────────
 
-IMG_GEN_TIMEOUT = 150  # seconds — eventlet.Timeout kills hung requests reliably
+IMG_GEN_TIMEOUT = 90  # seconds — eventlet.Timeout kills hung requests reliably
 
 def gen_image(job_id: str, prompt: str, resolution: str, ratio: str,
               model_name: str, ref_urls: list, socket_id: str, model: str = 'nano-banana-pro'):

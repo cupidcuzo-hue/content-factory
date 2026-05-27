@@ -1894,24 +1894,37 @@ function getTarget(mid) {
   return $('mscg-'+mid)||sec;
 }
 
+function cancelJob(cid) {
+  pendingJobs.delete(cid);
+  const item = items.find(x=>x.id===cid);
+  if(item) item.status='cancelled';
+  const card=$('c-'+cid); if(!card) return;
+  card.classList.add('fail');
+  card.innerHTML=`<div class="cfail"><div class="cfail-icon">✕</div><div class="cfail-msg">Cancelled</div></div>`;
+  updateBadge();
+}
+
 function addPend(cid, mid, type, prompt, label, ratio) {
   items.push({id:cid,modelId:mid,type,status:'pending',prompt});
   $('empty').classList.add('hidden'); $('ogrid').style.display='';
   const m=MODELS.find(x=>x.id===mid);
   const card=document.createElement('div');
   card.className='gcard'+ratCls(ratio); card.id='c-'+cid;
-  card.innerHTML=`<div class="cbadge" style="color:${m.color}">${m.name}</div><div class="ctype">${type==='video'?'Video':'Image'}</div><div class="cpend"><div class="spinner lt"></div><div class="cpend-lbl">${label}</div><div class="cprog-wrap"><div class="cprog"></div></div></div>`;
+  card.innerHTML=`
+    <div class="cbadge" style="color:${m.color}">${m.name}</div>
+    <div class="ctype">${type==='video'?'Video':'Image'}</div>
+    <button onclick="cancelJob('${cid}')" title="Cancel" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.55);border:1px solid #333;border-radius:50%;width:22px;height:22px;color:#aaa;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;z-index:9">✕</button>
+    <div class="cpend"><div class="spinner lt"></div><div class="cpend-lbl">${label}</div><div class="cprog-wrap"><div class="cprog"></div></div></div>`;
   const t=getTarget(mid); t.insertBefore(card,t.firstChild);
   card.scrollIntoView({behavior:'smooth',block:'nearest'});
   updateBadge();
-  // Client-side kill switch — never spin forever if backend hangs/drops
-  const limitMs = type==='video' ? 12*60*1000 : 3*60*1000;
+  // Auto-cancel if API never responds — images 90s, videos 5 min
+  const limitMs = type==='video' ? 5*60*1000 : 90*1000;
+  const limitLabel = type==='video' ? '5 min' : '90s';
   setTimeout(() => {
     if (pendingJobs.has(cid)) {
       pendingJobs.delete(cid);
-      failCard(cid, type==='video'
-        ? 'Timed out after 12 min — API may be overloaded. Try again.'
-        : 'Timed out after 3 min — API may be overloaded. Try again.');
+      failCard(cid, `API no response after ${limitLabel} — try again or switch provider`);
     }
   }, limitMs);
 }
@@ -1962,7 +1975,8 @@ function dlAll() {
 }
 function clrOutput() {
   const p=items.filter(x=>x.status==='pending').length;
-  if(p>0&&!confirm(p+' items generating. Clear anyway?')) return;
+  if(p>0&&!confirm(p+' still generating — cancel all and clear?')) return;
+  pendingJobs.clear(); // cancel any in-flight so ghost completions don't re-render
   items=[]; $('ogrid').innerHTML=''; $('ogrid').style.display='none';
   $('empty').classList.remove('hidden'); updateBadge();
 }
