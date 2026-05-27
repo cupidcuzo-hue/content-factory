@@ -75,6 +75,13 @@ init_db()
 
 LAOZHANG_COSTS = {'1K': 0.0125, '2K': 0.025, '4K': 0.050}
 
+KIE_IMAGE_COSTS = {
+    'kolors':                  0.030,
+    'kolors-virtual-try-on':   0.050,
+    'kling-image/v1-standard': 0.035,
+    'kling-image/v1-pro':      0.060,
+}
+
 VIDEO_COSTS = {
     'kling/v2-1-standard':      0.125,
     'kling/v2-1-pro':           0.250,
@@ -407,6 +414,73 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
         threading.Thread(target=_bg_upload, daemon=True).start()
 
 
+# ── Image generation via KIE.ai ──────────────────────────────────────────────
+
+def gen_image_kie(job_id: str, prompt: str, ratio: str, model_name: str,
+                  socket_id: str, model: str = 'kolors'):
+    """Generate image via KIE.ai (Kolors / Kling Image), emit result immediately."""
+    cost_per = KIE_IMAGE_COSTS.get(model, 0.030)
+    headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
+
+    emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Submitting to KIE…', 'pct': 5})
+
+    try:
+        r = requests.post(
+            f'{KIE_BASE}/createTask',
+            headers=headers,
+            json={'model': model, 'input': {'prompt': prompt, 'aspect_ratio': ratio}},
+            timeout=30,
+        )
+        r.raise_for_status()
+        d = r.json()
+        if d.get('code') != 200:
+            raise Exception(d.get('msg', 'KIE API error'))
+        task_id = d['data']['taskId']
+        log.info(f"KIE image task created [{job_id}]: {task_id}")
+    except Exception as e:
+        log.error(f"KIE image submit failed [{job_id}]: {e}")
+        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'KIE image failed: {e}'})
+        return
+
+    deadline = time.time() + 180
+    poll_num = 0
+    while time.time() < deadline:
+        time.sleep(3)
+        poll_num += 1
+        try:
+            pr = requests.get(f'{KIE_BASE}/recordInfo?taskId={task_id}', headers=headers, timeout=15)
+            pr.raise_for_status()
+            pd = pr.json()
+            if isinstance(pd['data'].get('resultJson'), str):
+                try: pd['data']['result'] = json.loads(pd['data']['resultJson'])
+                except: pass
+            state = pd['data'].get('state')
+            pct = min(10 + poll_num * 8, 88)
+            emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': f'Generating… ({state})', 'pct': pct})
+            if state == 'success':
+                res = pd['data'].get('result', {})
+                urls = (res.get('resultUrls')
+                        or [v['url'] for v in res.get('images', [])]
+                        or [v['url'] for v in res.get('videos', [])]
+                        or ([res['url']] if res.get('url') else []))
+                if urls:
+                    img_url = urls[0]
+                    total_cost = log_cost(job_id, 'kie', model, 'image', model_name, cost_per)
+                    emit_to(socket_id, 'job:complete', {
+                        'job_id': job_id, 'url': img_url, 'cost': total_cost, 'provider': 'kie'
+                    })
+                    emit_to(socket_id, 'cost:update', {'today_total': today_total()})
+                    log.info(f"KIE image complete [{job_id}] cost=${total_cost:.4f}")
+                    return
+            elif state == 'fail':
+                emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'KIE image generation failed'})
+                return
+        except Exception as e:
+            log.warning(f"KIE image poll error [{job_id}]: {e}")
+
+    emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'KIE image timed out'})
+
+
 # ── API Routes ────────────────────────────────────────────────────────────────
 
 @app.route('/')
@@ -433,20 +507,36 @@ def api_gen_image():
 
 @app.route('/api/generate/image/batch', methods=['POST'])
 def api_gen_image_batch():
-    """Batch endpoint: one Laozhang call with n=count instead of N separate calls."""
+    """Batch endpoint: routes to Laozhang (single n=count call) or KIE (parallel threads)."""
     d = request.get_json(force=True)
-    t = threading.Thread(target=gen_image_batch, daemon=True, kwargs=dict(
-        job_ids=d['job_ids'],
-        prompt=d['prompt'],
-        resolution=d.get('resolution', '2K'),
-        ratio=d.get('ratio', '9:16'),
-        model=d.get('model', 'nano-banana-pro'),
-        model_name=d.get('model_name', 'unknown'),
-        ref_urls=d.get('ref_urls', []),
-        socket_id=d.get('socket_id', ''),
-    ))
-    t.start()
-    return jsonify({'ok': True, 'job_ids': d['job_ids']})
+    provider = d.get('provider', 'laozhang')
+    job_ids  = d['job_ids']
+
+    if provider == 'kie':
+        # KIE doesn't batch — fire one thread per image, all in parallel
+        for job_id in job_ids:
+            threading.Thread(target=gen_image_kie, daemon=True, kwargs=dict(
+                job_id=job_id,
+                prompt=d['prompt'],
+                ratio=d.get('ratio', '9:16'),
+                model=d.get('model', 'kolors'),
+                model_name=d.get('model_name', 'unknown'),
+                socket_id=d.get('socket_id', ''),
+            )).start()
+    else:
+        # Laozhang: one API call with n=count
+        threading.Thread(target=gen_image_batch, daemon=True, kwargs=dict(
+            job_ids=job_ids,
+            prompt=d['prompt'],
+            resolution=d.get('resolution', '2K'),
+            ratio=d.get('ratio', '9:16'),
+            model=d.get('model', 'nano-banana-pro'),
+            model_name=d.get('model_name', 'unknown'),
+            ref_urls=d.get('ref_urls', []),
+            socket_id=d.get('socket_id', ''),
+        )).start()
+
+    return jsonify({'ok': True, 'job_ids': job_ids})
 
 
 @app.route('/api/generate/video', methods=['POST'])

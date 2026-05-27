@@ -266,6 +266,13 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
 #viewer img,#viewer video{max-width:90vw;max-height:80vh;border-radius:8px;object-fit:contain}
 .vclose{position:absolute;top:16px;right:16px;background:rgba(255,255,255,.1);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 
+/* SOURCE PICKER */
+.src-row{display:flex;align-items:center;gap:6px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.src-lbl{font-size:10px;color:var(--muted);font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-right:2px}
+.src-pill{background:var(--card);border:1.5px solid var(--border);border-radius:20px;padding:4px 14px;font-size:11px;font-weight:600;color:var(--muted2);cursor:pointer;transition:all .18s;user-select:none;letter-spacing:.3px}
+.src-pill:hover{border-color:var(--muted);color:var(--text)}
+.src-pill.active{border-color:var(--gold);color:var(--gold);background:rgba(255,255,255,.04)}
+
 /* MOBILE */
 @media(max-width:768px){
   #lpanel{position:fixed;bottom:0;left:0;right:0;width:100%;max-height:60vh;z-index:200;border-right:none;border-top:1px solid var(--border);transform:translateY(100%);transition:transform .25s ease}
@@ -351,7 +358,24 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
 
       <!-- IMAGES TAB -->
       <div id="timages" class="pscroll">
-        <div class="stabs">
+        <!-- SOURCE PICKER -->
+        <div class="src-row">
+          <span class="src-lbl">Source</span>
+          <div class="src-pill active" id="src-lz" onclick="setImageProvider('laozhang')">⚡ Laozhang</div>
+          <div class="src-pill" id="src-kie" onclick="setImageProvider('kie')">KIE</div>
+        </div>
+        <!-- KIE image model (shown when KIE selected) -->
+        <div id="kie-img-opts" style="display:none;margin-bottom:14px">
+          <div class="fg" style="margin:0">
+            <label class="fl">KIE Image Model</label>
+            <select id="kie-img-m" onchange="updateCostPreviews()">
+              <option value="kolors">Kolors (Fast)</option>
+              <option value="kling-image/v1-standard">Kling Image Standard</option>
+              <option value="kling-image/v1-pro">Kling Image Pro</option>
+            </select>
+          </div>
+        </div>
+        <div class="stabs" id="img-stabs">
           <div class="stab active" data-s="sd">Seedream</div>
           <div class="stab" data-s="nb">NanoBanana</div>
         </div>
@@ -435,6 +459,10 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
 
       <!-- VIDEO TAB -->
       <div id="tvideo" class="pscroll" style="display:none">
+        <div class="src-row" style="margin-bottom:10px">
+          <span class="src-lbl">Source</span>
+          <div class="src-pill active" style="cursor:default">KIE</div>
+        </div>
         <div class="stabs" style="margin-bottom:16px">
           <div class="stab active" data-vs="txt">Text to Video</div>
           <div class="stab" data-vs="mc">Motion Control</div>
@@ -871,6 +899,18 @@ let selectedModels = new Set(['kim']);
 let items = [];
 let corsShown = false;
 let hModelFil = 'all', hTypeFil = 'all';
+let imageProvider = 'laozhang'; // 'laozhang' | 'kie'
+
+function setImageProvider(p) {
+  imageProvider = p;
+  $('src-lz').classList.toggle('active', p === 'laozhang');
+  $('src-kie').classList.toggle('active', p === 'kie');
+  $('kie-img-opts').style.display = p === 'kie' ? '' : 'none';
+  $('img-stabs').style.display    = p === 'kie' ? 'none' : '';
+  $('ssd').style.display          = p === 'kie' ? 'none' : (activeSub === 'sd' ? '' : 'none');
+  $('snb').style.display          = p === 'kie' ? 'none' : (activeSub === 'nb' ? '' : 'none');
+  updateCostPreviews();
+}
 
 const KIE = 'https://api.kie.ai/api/v1/jobs';
 const $ = id => document.getElementById(id);
@@ -1455,13 +1495,25 @@ function buildSettingsRefs() {
 
 // ── COST ──
 function getCost(model) { return COSTS[model]||0.05; }
-function updateCostPreviews() {
-  const sdm=$('sd-m').value==='__c'?($('sd-mc').value||'seedream/4.5-text-to-image'):$('sd-m').value;
-  const sdc=parseInt($('sd-c').value)||4;
-  $('sd-cp').innerHTML=`Est. cost: <strong>~${f$(getCost(sdm)*sdc)}</strong> for ${sdc} image${sdc>1?'s':''}`;
+const KIE_IMAGE_COSTS = {kolors:0.030,'kolors-virtual-try-on':0.050,'kling-image/v1-standard':0.035,'kling-image/v1-pro':0.060};
+function getKieImgCost(m){return KIE_IMAGE_COSTS[m]||0.030;}
 
-  const nbc=parseInt($('nb-c').value)||4;
-  $('nb-cp').innerHTML=`Est. cost: <strong>~${f$(getCost('nano-banana-pro')*nbc)}</strong> for ${nbc} image${nbc>1?'s':''}`;
+function updateCostPreviews() {
+  const imgCnt = parseInt(($('sd-c')||{}).value)||4;
+
+  if(imageProvider==='kie') {
+    const km=($('kie-img-m')||{}).value||'kolors';
+    const kc=getKieImgCost(km);
+    const label=`Est. cost: <strong>~${f$(kc*imgCnt)}</strong> for ${imgCnt} image${imgCnt>1?'s':''}`;
+    if($('sd-cp')) $('sd-cp').innerHTML=label;
+    if($('nb-cp')) $('nb-cp').innerHTML=label;
+  } else {
+    const sdm=$('sd-m').value==='__c'?($('sd-mc').value||'seedream/4.5-text-to-image'):$('sd-m').value;
+    const sdc=parseInt($('sd-c').value)||4;
+    if($('sd-cp')) $('sd-cp').innerHTML=`Est. cost: <strong>~${f$(getCost(sdm)*sdc)}</strong> for ${sdc} image${sdc>1?'s':''}`;
+    const nbc=parseInt($('nb-c').value)||4;
+    if($('nb-cp')) $('nb-cp').innerHTML=`Est. cost: <strong>~${f$(getCost('nano-banana-pro')*nbc)}</strong> for ${nbc} image${nbc>1?'s':''}`;
+  }
 
   const vim=$('vi-m').value==='__c'?($('vi-mc').value||'kling-3.0/video'):$('vi-m').value;
   const vic=parseInt($('vi-c').value)||3;
@@ -1737,8 +1789,9 @@ async function genSd(mid) {
     addPend(cid,mid,'image',prompt,'Image '+(i+1)+'/'+cnt,ratio);
     pendingJobs.set(cid,{mid,type:'image',prompt,model,cost,ratio});
   }
+  const kieModel = imageProvider==='kie' ? (($('kie-img-m')||{}).value||'kolors') : null;
   fetch('/api/generate/image/batch',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({job_ids,prompt,model,resolution:'2K',ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
+    body:JSON.stringify({job_ids,prompt,provider:imageProvider,model:kieModel||model,resolution:'2K',ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
   }).catch(e=>{ job_ids.forEach(cid=>{pendingJobs.delete(cid);failCard(cid,e.message||'Submit failed');}); });
   btn.disabled=false; btn.textContent='Generate';
 }
@@ -1766,8 +1819,9 @@ async function genNb(mid) {
     addPend(cid,mid,'image',prompt,'Image '+(i+1)+'/'+cnt,ratio);
     pendingJobs.set(cid,{mid,type:'image',prompt,model:'nano-banana-pro',cost,ratio});
   }
+  const kieModelNb = imageProvider==='kie' ? (($('kie-img-m')||{}).value||'kolors') : null;
   fetch('/api/generate/image/batch',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({job_ids,prompt,model:'nano-banana-pro',resolution:res||'2K',ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
+    body:JSON.stringify({job_ids,prompt,provider:imageProvider,model:kieModelNb||'nano-banana-pro',resolution:res||'2K',ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
   }).catch(e=>{ job_ids.forEach(cid=>{pendingJobs.delete(cid);failCard(cid,e.message||'Submit failed');}); });
   btn.disabled=false; btn.textContent='Generate';
 }
