@@ -181,7 +181,7 @@ def _lz_payload(model: str, prompt: str, ratio: str, resolution: str, ref_urls: 
         p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'hd'}
     elif model in GPTI1_MODELS:
         size = GPTI1_SIZE_MAP.get(ratio, '1024x1536')
-        p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'high'}
+        p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'high', 'response_format': 'url'}
     else:
         size = IMG_SIZE_MAP.get((ratio, resolution), '1024x1820')
         p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'hd'}
@@ -279,7 +279,16 @@ def gen_image(job_id: str, prompt: str, resolution: str, ratio: str,
         r.raise_for_status()
         data = r.json()
         log.info(f"Laozhang image response [{job_id}]: {json.dumps(data)[:300]}")
-        img_url = data['data'][0]['url']
+        item = data['data'][0]
+        img_url = item.get('url') or item.get('revised_prompt') and None  # url first
+        if not img_url and item.get('b64_json'):
+            # Model returned base64 — shouldn't happen with response_format=url but handle it
+            import base64
+            img_bytes = base64.b64decode(item['b64_json'])
+            drive_url = upload_to_drive(img_bytes, f"lz_{job_id[:8]}.png", 'image/png')
+            img_url = drive_url
+        if not img_url:
+            raise Exception(f"No URL in response: {json.dumps(data)[:200]}")
         log.info(f"Laozhang image ready [{job_id}]: {img_url[:60]}…")
     except eventlet.Timeout:
         log.error(f"Laozhang image timed out [{job_id}] after {IMG_GEN_TIMEOUT}s")
@@ -337,7 +346,7 @@ def gen_image_batch(job_ids: list, prompt: str, resolution: str, ratio: str,
         r.raise_for_status()
         data = r.json()
         log.info(f"Laozhang batch response [{job_ids[0]}]: {json.dumps(data)[:300]}")
-        img_urls = [item['url'] for item in data['data']]
+        img_urls = [item.get('url') or '' for item in data['data']]
         log.info(f"Laozhang batch ready [{job_ids[0]}…]: {n} images")
     except eventlet.Timeout:
         log.error(f"Laozhang batch timed out after {batch_timeout}s")
