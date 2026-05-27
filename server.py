@@ -19,13 +19,14 @@ from flask_socketio import SocketIO
 
 # ── Startup env checks ────────────────────────────────────────────────────────
 
-LAOZHANG_API_KEY = os.environ.get('LAOZHANG_API_KEY')
-KIE_API_KEY      = os.environ.get('KIE_API_KEY')
+LAOZHANG_API_KEY = os.environ.get('LAOZHANG_API_KEY', '')
+KIE_API_KEY      = os.environ.get('KIE_API_KEY', '')
 
-if not LAOZHANG_API_KEY:
-    sys.exit("❌  LAOZHANG_API_KEY env var is missing. Set it in Railway Variables.")
-if not KIE_API_KEY:
-    sys.exit("❌  KIE_API_KEY env var is missing. Set it in Railway Variables.")
+# Warn on missing keys but don't crash — app still starts and serves the frontend
+_missing = [k for k, v in [('LAOZHANG_API_KEY', LAOZHANG_API_KEY), ('KIE_API_KEY', KIE_API_KEY)] if not v]
+if _missing:
+    import warnings
+    warnings.warn(f"⚠️  Missing env vars: {', '.join(_missing)} — those API calls will fail at runtime.")
 
 GOOGLE_SA_JSON       = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON', '')
 GOOGLE_DRIVE_FOLDER  = os.environ.get('GOOGLE_DRIVE_FOLDER_ID', '')
@@ -664,24 +665,38 @@ def api_test_kie():
 @app.route('/api/test/all')
 def api_test_all():
     results = {}
+    if not LAOZHANG_API_KEY:
+        results['laozhang'] = 'no_key'
+    if not KIE_API_KEY:
+        results['kie'] = 'no_key'
+
+    futures = {}
     with ThreadPoolExecutor(max_workers=2) as ex:
-        lf = ex.submit(lambda: requests.post(
-            'https://api.laozhang.ai/v1/images/generations',
-            headers={'Authorization': f'Bearer {LAOZHANG_API_KEY}', 'Content-Type': 'application/json'},
-            json={'model': 'nano-banana-pro', 'prompt': 'test', 'n': 1, 'size': '512x910', 'quality': 'hd'},
-            timeout=15))
-        kf = ex.submit(lambda: requests.get(
-            f'{KIE_BASE}/recordInfo?taskId=healthcheck',
-            headers={'Authorization': f'Bearer {KIE_API_KEY}'}, timeout=10))
-    try:
-        lr = lf.result(); results['laozhang'] = 'ok' if lr.status_code in (200, 201, 400, 422, 503) else 'error'
-    except Exception:
-        results['laozhang'] = 'error'
-    try:
-        kr = kf.result(); results['kie'] = 'ok' if kr.status_code in (200, 400, 404, 422) else 'error'
-    except Exception:
-        results['kie'] = 'error'
-    results['all_ok'] = results['laozhang'] == 'ok' and results['kie'] == 'ok'
+        if LAOZHANG_API_KEY:
+            futures['laozhang'] = ex.submit(lambda: requests.post(
+                'https://api.laozhang.ai/v1/images/generations',
+                headers={'Authorization': f'Bearer {LAOZHANG_API_KEY}', 'Content-Type': 'application/json'},
+                json={'model': 'nano-banana-pro', 'prompt': 'test', 'n': 1, 'size': '512x910', 'quality': 'hd'},
+                timeout=15))
+        if KIE_API_KEY:
+            futures['kie'] = ex.submit(lambda: requests.get(
+                f'{KIE_BASE}/recordInfo?taskId=healthcheck',
+                headers={'Authorization': f'Bearer {KIE_API_KEY}'}, timeout=10))
+
+    if 'laozhang' in futures:
+        try:
+            lr = futures['laozhang'].result()
+            results['laozhang'] = 'ok' if lr.status_code in (200, 201, 400, 422, 503) else 'error'
+        except Exception:
+            results['laozhang'] = 'error'
+    if 'kie' in futures:
+        try:
+            kr = futures['kie'].result()
+            results['kie'] = 'ok' if kr.status_code in (200, 400, 404, 422) else 'error'
+        except Exception:
+            results['kie'] = 'error'
+
+    results['all_ok'] = results.get('laozhang') == 'ok' and results.get('kie') == 'ok'
     return jsonify(results)
 
 
