@@ -119,6 +119,20 @@ VIDEO_COSTS = {
     'kling-2.6/motion-control': 0.350,
 }
 
+LAOZHANG_VIDEO_COSTS = {
+    'wan2.1-14b-720p':     0.15,
+    'wan2.1-14b-480p':     0.08,
+    'wan2.1-i2v-14b-720p': 0.18,
+}
+
+LAOZHANG_VIDEO_SIZE_MAP = {
+    '9:16': '720x1280',
+    '16:9': '1280x720',
+    '1:1':  '720x720',
+    '3:4':  '576x768',
+    '4:3':  '768x576',
+}
+
 IMG_SIZE_MAP = {
     ('9:16', '2K'): '1024x1820', ('9:16', '4K'): '2048x3640', ('9:16', '1K'): '512x910',
     ('1:1',  '2K'): '1024x1024', ('1:1',  '4K'): '2048x2048', ('1:1',  '1K'): '512x512',
@@ -441,6 +455,74 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
         threading.Thread(target=_bg_upload, daemon=True).start()
 
 
+# ── Video generation via Laozhang ────────────────────────────────────────────
+
+def gen_video_laozhang(job_id: str, prompt: str, model: str, duration: str,
+                       ratio: str, image_url: str | None, socket_id: str,
+                       model_name: str = 'unknown'):
+    """Generate video via Laozhang.ai (Wan 2.1 / similar), emit result, Drive in background."""
+    cost_per = LAOZHANG_VIDEO_COSTS.get(model, 0.15)
+    size = LAOZHANG_VIDEO_SIZE_MAP.get(ratio, '720x1280')
+    headers = {'Authorization': f'Bearer {LAOZHANG_API_KEY}', 'Content-Type': 'application/json'}
+
+    emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Submitting to Laozhang…', 'pct': 5})
+
+    payload = {
+        'model': model,
+        'prompt': prompt,
+        'size': size,
+        'duration': int(duration),
+    }
+    if image_url:
+        payload['image_url'] = image_url
+
+    try:
+        r = requests.post(
+            'https://api.laozhang.ai/v1/videos/generations',
+            headers=headers,
+            json=payload,
+            timeout=300,
+        )
+        r.raise_for_status()
+        d = r.json()
+
+        # Parse URL — Laozhang mirrors OpenAI format: data[0].url
+        data = d.get('data')
+        video_url = None
+        if isinstance(data, list) and data:
+            video_url = data[0].get('url') or data[0].get('video_url')
+        elif isinstance(data, dict):
+            video_url = data.get('url') or data.get('video_url')
+
+        if not video_url:
+            raise Exception(f'No URL in response: {d}')
+
+        log.info(f"Laozhang video ready [{job_id}]: {video_url[:60]}…")
+    except Exception as e:
+        log.error(f"Laozhang video gen failed [{job_id}]: {e}")
+        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'Video generation failed — Laozhang: {e}'})
+        return
+
+    total_cost = log_cost(job_id, 'laozhang', model, 'video', model_name, cost_per)
+    emit_to(socket_id, 'job:complete', {
+        'job_id': job_id, 'url': video_url, 'cost': total_cost, 'provider': 'laozhang'
+    })
+    emit_to(socket_id, 'cost:update', {'today_total': today_total()})
+    log.info(f"Laozhang video job complete [{job_id}] cost=${total_cost:.4f}")
+
+    if GOOGLE_SA_JSON and GOOGLE_DRIVE_FOLDER:
+        date_str = datetime.date.today().strftime('%Y%m%d')
+        safe_name = model_name.replace(' ', '_').lower()
+        fname = f"{safe_name}_video_{date_str}_{job_id[:8]}.mp4"
+        def _bg_upload(url=video_url, fn=fname):
+            try:
+                vid_data = requests.get(url, timeout=120).content
+                upload_to_drive(vid_data, fn, 'video/mp4')
+            except Exception as ex:
+                log.warning(f"BG Drive upload failed [{job_id}]: {ex}")
+        threading.Thread(target=_bg_upload, daemon=True).start()
+
+
 # ── Image generation via KIE.ai ──────────────────────────────────────────────
 
 def gen_image_kie(job_id: str, prompt: str, ratio: str, model_name: str,
@@ -569,20 +651,34 @@ def api_gen_image_batch():
 @app.route('/api/generate/video', methods=['POST'])
 def api_gen_video():
     d = request.get_json(force=True)
-    t = threading.Thread(target=gen_video, daemon=True, kwargs=dict(
-        job_id=d['job_id'],
-        prompt=d.get('prompt', ''),
-        model=d.get('model', 'kling/v2-1-pro'),
-        duration=str(d.get('duration', '5')),
-        ratio=d.get('ratio', '9:16'),
-        image_url=d.get('image_url'),
-        mode=d.get('mode'),
-        model_name=d.get('model_name', 'unknown'),
-        socket_id=d.get('socket_id', ''),
-        mc_input_urls=d.get('mc_input_urls'),
-        mc_video_urls=d.get('mc_video_urls'),
-        mc_orientation=d.get('mc_orientation'),
-    ))
+    provider = d.get('provider', 'kie')
+
+    if provider == 'laozhang':
+        t = threading.Thread(target=gen_video_laozhang, daemon=True, kwargs=dict(
+            job_id=d['job_id'],
+            prompt=d.get('prompt', ''),
+            model=d.get('model', 'wan2.1-14b-720p'),
+            duration=str(d.get('duration', '5')),
+            ratio=d.get('ratio', '9:16'),
+            image_url=d.get('image_url'),
+            model_name=d.get('model_name', 'unknown'),
+            socket_id=d.get('socket_id', ''),
+        ))
+    else:
+        t = threading.Thread(target=gen_video, daemon=True, kwargs=dict(
+            job_id=d['job_id'],
+            prompt=d.get('prompt', ''),
+            model=d.get('model', 'kling/v2-1-pro'),
+            duration=str(d.get('duration', '5')),
+            ratio=d.get('ratio', '9:16'),
+            image_url=d.get('image_url'),
+            mode=d.get('mode'),
+            model_name=d.get('model_name', 'unknown'),
+            socket_id=d.get('socket_id', ''),
+            mc_input_urls=d.get('mc_input_urls'),
+            mc_video_urls=d.get('mc_video_urls'),
+            mc_orientation=d.get('mc_orientation'),
+        ))
     t.start()
     return jsonify({'ok': True, 'job_id': d['job_id']})
 

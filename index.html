@@ -461,11 +461,19 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
       <div id="tvideo" class="pscroll" style="display:none">
         <div class="src-row" style="margin-bottom:10px">
           <span class="src-lbl">Source</span>
-          <div class="src-pill active" style="cursor:default">KIE</div>
+          <div class="src-pill" id="vsrc-lz" onclick="setVideoProvider('laozhang')">⚡ Laozhang</div>
+          <div class="src-pill active" id="vsrc-kie" onclick="setVideoProvider('kie')">KIE</div>
+        </div>
+        <div id="lz-vid-opts" style="display:none;margin-bottom:14px">
+          <select id="lz-vid-m">
+            <option value="wan2.1-14b-720p">Wan 2.1 720p (Fast)</option>
+            <option value="wan2.1-14b-480p">Wan 2.1 480p (Fastest)</option>
+            <option value="wan2.1-i2v-14b-720p">Wan 2.1 Image-to-Video</option>
+          </select>
         </div>
         <div class="stabs" style="margin-bottom:16px">
           <div class="stab active" data-vs="txt">Text to Video</div>
-          <div class="stab" data-vs="mc">Motion Control</div>
+          <div class="stab" id="vs-mc-tab" data-vs="mc">Motion Control</div>
         </div>
 
         <!-- TEXT TO VIDEO -->
@@ -533,7 +541,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
             <textarea id="vi-p" placeholder="Describe the video scene in detail…"></textarea>
           </div>
           <div class="fg"><label class="fl">Negative Prompt <span>(optional)</span></label><textarea id="vi-n" class="sm" placeholder="ugly, blurry, watermark…"></textarea></div>
-          <div class="fg">
+          <div class="fg" id="vi-model-row">
             <label class="fl">Model</label>
             <select id="vi-m">
               <option value="kling/v2-1-standard" selected>⚡ Kling Standard (Fastest)</option>
@@ -888,6 +896,9 @@ const COSTS = {
   'kling-2.6/text-to-video':            0.25,
   'kling-3.0/motion-control':           0.50,
   'kling-2.6/motion-control':           0.35,
+  'wan2.1-14b-720p':                    0.15,
+  'wan2.1-14b-480p':                    0.08,
+  'wan2.1-i2v-14b-720p':                0.18,
 };
 
 // ── STATE ──
@@ -900,6 +911,7 @@ let items = [];
 let corsShown = false;
 let hModelFil = 'all', hTypeFil = 'all';
 let imageProvider = 'laozhang'; // 'laozhang' | 'kie'
+let videoProvider = 'kie';     // 'laozhang' | 'kie' — KIE is default for video
 
 function setImageProvider(p) {
   imageProvider = p;
@@ -919,6 +931,25 @@ function setImageProvider(p) {
     $('ssd').style.display = activeSub === 'sd' ? '' : 'none';
     $('snb').style.display = activeSub === 'nb' ? '' : 'none';
     if ($('sd-model-row')) $('sd-model-row').style.display = '';
+  }
+  updateCostPreviews();
+}
+
+function setVideoProvider(p) {
+  videoProvider = p;
+  $('vsrc-lz').classList.toggle('active', p === 'laozhang');
+  $('vsrc-kie').classList.toggle('active', p === 'kie');
+  // Laozhang model dropdown vs KIE model row
+  $('lz-vid-opts').style.display  = p === 'laozhang' ? '' : 'none';
+  if ($('vi-model-row')) $('vi-model-row').style.display = p === 'laozhang' ? 'none' : '';
+  // Motion Control is KIE-only — hide that sub-tab when Laozhang selected
+  if ($('vs-mc-tab')) $('vs-mc-tab').style.display = p === 'laozhang' ? 'none' : '';
+  // If Motion Control was active and we switched to Laozhang, reset to Text to Video
+  if (p === 'laozhang') {
+    document.querySelectorAll('.stab[data-vs]').forEach(t => t.classList.remove('active'));
+    $('vs-txt') && ($('vs-txt').style.display = '');
+    $('vs-mc') && ($('vs-mc').style.display = 'none');
+    document.querySelector('.stab[data-vs="txt"]')?.classList.add('active');
   }
   updateCostPreviews();
 }
@@ -1839,13 +1870,16 @@ async function genNb(mid) {
 
 async function genVi(mid) {
   const prompt=withIdentity($('vi-p').value.trim(), mid); if(!prompt){alert('Enter a prompt.');return;}
-  const model=$('vi-m').value==='__c'?$('vi-mc').value.trim():$('vi-m').value;
+  // Pick model from the active provider's dropdown
+  const model = videoProvider === 'laozhang'
+    ? ($('lz-vid-m').value || 'wan2.1-14b-720p')
+    : ($('vi-m').value==='__c' ? $('vi-mc').value.trim() : $('vi-m').value);
   if(!model){alert('Enter a model string.');return;}
   const cnt=parseInt($('vi-c').value), ratio=$('vi-r').value, dur=$('vi-d').value;
   const cost=getCost(model);
   const btn=$('vi-gen'); btn.disabled=true; btn.innerHTML='<div class="spinner"></div>Submitting…';
 
-  // Upload start frame to Cloudinary if provided
+  // Upload start frame to Cloudinary if provided (KIE only — Laozhang may not support frames)
   const needUpload = viStartFrameB64 || viEndFrameB64;
   if(needUpload && !getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings to use frames.');btn.disabled=false;btn.textContent='Generate';return;}
   let startFrameUrl=null;
@@ -1862,7 +1896,7 @@ async function genVi(mid) {
     const cid=uid(); addPend(cid,mid,'video',prompt,'Video '+(i+1)+'/'+cnt,ratio);
     pendingJobs.set(cid,{mid,type:'video',prompt,model,cost,ratio});
     fetch('/api/generate/video',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({job_id:cid,prompt,model,duration:dur,ratio,image_url:startFrameUrl,mode:isKling3?viMode:null,model_name:m?.name||mid,socket_id:socket?.id||''})
+      body:JSON.stringify({job_id:cid,prompt,model,provider:videoProvider,duration:dur,ratio,image_url:startFrameUrl,mode:isKling3?viMode:null,model_name:m?.name||mid,socket_id:socket?.id||''})
     }).catch(e=>{ pendingJobs.delete(cid); failCard(cid,e.message||'Submit failed'); });
   }
   btn.disabled=false; btn.textContent='Generate';
