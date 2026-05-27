@@ -402,7 +402,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
             <textarea id="sd-p" placeholder="Describe the image in detail…"></textarea>
           </div>
           <div class="fg"><label class="fl">Negative Prompt <span>(optional)</span></label><textarea id="sd-n" class="sm" placeholder="ugly, blurry, watermark, low quality…"></textarea></div>
-          <div class="fg">
+          <div class="fg" id="sd-model-row">
             <label class="fl">Model</label>
             <select id="sd-m">
               <option value="seedream/4.5-edit">Seedream 4.5 Edit ✦ refs</option>
@@ -905,10 +905,21 @@ function setImageProvider(p) {
   imageProvider = p;
   $('src-lz').classList.toggle('active', p === 'laozhang');
   $('src-kie').classList.toggle('active', p === 'kie');
+  // KIE model dropdown — shown when KIE selected
   $('kie-img-opts').style.display = p === 'kie' ? '' : 'none';
-  $('img-stabs').style.display    = p === 'kie' ? 'none' : '';
-  $('ssd').style.display          = p === 'kie' ? 'none' : (activeSub === 'sd' ? '' : 'none');
-  $('snb').style.display          = p === 'kie' ? 'none' : (activeSub === 'nb' ? '' : 'none');
+  // Sub-tabs (Seedream / NanoBanana) only apply to Laozhang
+  $('img-stabs').style.display = p === 'kie' ? 'none' : '';
+  // Always show ssd (prompt, count, ratio, generate button)
+  // When KIE: hide the Laozhang model selector inside ssd; NanoBanana stays hidden
+  if (p === 'kie') {
+    $('ssd').style.display = '';
+    $('snb').style.display = 'none';
+    if ($('sd-model-row')) $('sd-model-row').style.display = 'none';
+  } else {
+    $('ssd').style.display = activeSub === 'sd' ? '' : 'none';
+    $('snb').style.display = activeSub === 'nb' ? '' : 'none';
+    if ($('sd-model-row')) $('sd-model-row').style.display = '';
+  }
   updateCostPreviews();
 }
 
