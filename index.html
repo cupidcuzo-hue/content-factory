@@ -446,10 +446,19 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
           <div class="src-pill active" id="vsrc-kie" onclick="setVideoProvider('kie')">KIE</div>
         </div>
         <div id="lz-vid-opts" style="display:none;margin-bottom:14px">
-          <select id="lz-vid-m">
-            <option value="wan2.1-14b-720p">Wan 2.1 720p (Fast)</option>
-            <option value="wan2.1-14b-480p">Wan 2.1 480p (Fastest)</option>
-            <option value="wan2.1-i2v-14b-720p">Wan 2.1 Image-to-Video</option>
+          <select id="lz-vid-m" onchange="updateCostPreviews()">
+            <optgroup label="── Wan 2.1 ──">
+              <option value="wan2.1-14b-720p">Wan 2.1 720p (Fast)</option>
+              <option value="wan2.1-14b-480p">Wan 2.1 480p (Fastest)</option>
+              <option value="wan2.1-i2v-14b-720p">Wan 2.1 Image-to-Video</option>
+            </optgroup>
+            <optgroup label="── Kling ──">
+              <option value="kling-3.0/video">Kling 3.0</option>
+              <option value="kling-2.6/text-to-video">Kling 2.6</option>
+              <option value="kling/v2-1-pro">Kling v2.1 Pro</option>
+              <option value="kling/v2-1-standard">Kling v2.1 Standard</option>
+              <option value="kling/v2-1-master">Kling v2.1 Master</option>
+            </optgroup>
           </select>
         </div>
         <div class="stabs" style="margin-bottom:16px">

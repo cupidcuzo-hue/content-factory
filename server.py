@@ -130,9 +130,15 @@ VIDEO_COSTS = {
 }
 
 LAOZHANG_VIDEO_COSTS = {
-    'wan2.1-14b-720p':     0.15,
-    'wan2.1-14b-480p':     0.08,
-    'wan2.1-i2v-14b-720p': 0.18,
+    'wan2.1-14b-720p':      0.15,
+    'wan2.1-14b-480p':      0.08,
+    'wan2.1-i2v-14b-720p':  0.18,
+    # Kling models accessible via Laozhang
+    'kling-3.0/video':          0.350,
+    'kling-2.6/text-to-video':  0.250,
+    'kling/v2-1-pro':           0.250,
+    'kling/v2-1-standard':      0.125,
+    'kling/v2-1-master':        0.800,
 }
 
 LAOZHANG_VIDEO_SIZE_MAP = {
