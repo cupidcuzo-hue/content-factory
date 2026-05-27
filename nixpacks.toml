@@ -2,6 +2,3 @@ providers = ["python"]
 
 [phases.install]
 cmds = ["pip install -r requirements.txt"]
-
-[start]
-cmd = "gunicorn --worker-class eventlet -w 1 server:app --bind 0.0.0.0:$PORT"
