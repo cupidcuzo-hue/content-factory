@@ -473,58 +473,107 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
 
 # ── Video generation via Laozhang ────────────────────────────────────────────
 
+def _parse_lz_video_url(d: dict) -> str | None:
+    """Extract video URL from any Laozhang video response shape."""
+    data = d.get('data')
+    if isinstance(data, list) and data:
+        item = data[0]
+        return item.get('url') or item.get('video_url') or item.get('result', {}).get('url')
+    if isinstance(data, dict):
+        return data.get('url') or data.get('video_url') or data.get('result', {}).get('url')
+    # Some models return URL at top level
+    return d.get('url') or d.get('video_url')
+
+
 def gen_video_laozhang(job_id: str, prompt: str, model: str, duration: str,
                        ratio: str, image_url: str | None, socket_id: str,
                        model_name: str = 'unknown'):
-    """Generate video via Laozhang.ai (Wan 2.1 / similar), emit result, Drive in background."""
+    """Generate video via Laozhang.ai.
+    Handles both sync (URL in first response) and async (task ID + polling) APIs.
+    Wan 2.1 and Kling models both supported.
+    """
     cost_per = LAOZHANG_VIDEO_COSTS.get(model, 0.15)
     size = LAOZHANG_VIDEO_SIZE_MAP.get(ratio, '720x1280')
     headers = {'Authorization': f'Bearer {LAOZHANG_API_KEY}', 'Content-Type': 'application/json'}
 
     emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Submitting to Laozhang…', 'pct': 5})
 
-    payload = {
-        'model': model,
-        'prompt': prompt,
-        'size': size,
-        'duration': int(duration),
-    }
+    payload = {'model': model, 'prompt': prompt, 'size': size, 'duration': int(duration)}
     if image_url:
         payload['image_url'] = image_url
 
+    # ── Step 1: Submit ────────────────────────────────────────────────────────
     try:
         r = requests.post(
             'https://api.laozhang.ai/v1/videos/generations',
-            headers=headers,
-            json=payload,
-            timeout=300,
+            headers=headers, json=payload, timeout=60,
         )
         r.raise_for_status()
         d = r.json()
-
-        # Parse URL — Laozhang mirrors OpenAI format: data[0].url
-        data = d.get('data')
-        video_url = None
-        if isinstance(data, list) and data:
-            video_url = data[0].get('url') or data[0].get('video_url')
-        elif isinstance(data, dict):
-            video_url = data.get('url') or data.get('video_url')
-
-        if not video_url:
-            raise Exception(f'No URL in response: {d}')
-
-        log.info(f"Laozhang video ready [{job_id}]: {video_url[:60]}…")
+        log.info(f"Laozhang video submit [{job_id}] → {json.dumps(d)[:300]}")
     except Exception as e:
-        log.error(f"Laozhang video gen failed [{job_id}]: {e}")
-        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'Video generation failed — Laozhang: {e}'})
+        log.error(f"Laozhang video submit failed [{job_id}]: {e}")
+        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'Laozhang submit failed: {e}'})
         return
 
+    # ── Step 2: Try sync URL first ────────────────────────────────────────────
+    video_url = _parse_lz_video_url(d)
+    if video_url:
+        log.info(f"Laozhang video sync [{job_id}]: {video_url[:80]}")
+    else:
+        # ── Step 3: Async — extract task/generation ID and poll ───────────────
+        task_id = (d.get('id')
+                   or (d.get('data') or {}).get('id') if isinstance(d.get('data'), dict) else None
+                   or next((item.get('id') for item in (d.get('data') or []) if isinstance(item, dict)), None))
+
+        if not task_id:
+            log.error(f"Laozhang video: no URL and no task ID [{job_id}]: {d}")
+            emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'Laozhang: no task ID in response — check API key or model name'})
+            return
+
+        log.info(f"Laozhang video async [{job_id}] task_id={task_id} — polling…")
+        deadline = time.time() + 600  # 10 min max
+        poll_num = 0
+        while time.time() < deadline:
+            poll_interval = 5 if poll_num < 12 else 10
+            time.sleep(poll_interval)
+            poll_num += 1
+            try:
+                pr = requests.get(
+                    f'https://api.laozhang.ai/v1/videos/generations/{task_id}',
+                    headers=headers, timeout=30,
+                )
+                pr.raise_for_status()
+                pd = pr.json()
+                pct = min(10 + poll_num * 4, 90)
+                status = (pd.get('status') or pd.get('state') or '').lower()
+                emit_to(socket_id, 'job:progress', {
+                    'job_id': job_id,
+                    'status': f'Generating… ({status or f"poll {poll_num}"})',
+                    'pct': pct,
+                })
+                log.info(f"Laozhang poll [{job_id}] #{poll_num} status={status}: {json.dumps(pd)[:200]}")
+
+                video_url = _parse_lz_video_url(pd)
+                if video_url:
+                    break
+                if status in ('failed', 'cancelled', 'error'):
+                    emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'Laozhang video failed: {status}'})
+                    return
+            except Exception as e:
+                log.warning(f"Laozhang poll error [{job_id}] #{poll_num}: {e}")
+
+        if not video_url:
+            emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'Laozhang video timed out after 10 min'})
+            return
+
+    # ── Done ──────────────────────────────────────────────────────────────────
     total_cost = log_cost(job_id, 'laozhang', model, 'video', model_name, cost_per)
     emit_to(socket_id, 'job:complete', {
         'job_id': job_id, 'url': video_url, 'cost': total_cost, 'provider': 'laozhang'
     })
     emit_to(socket_id, 'cost:update', {'today_total': today_total()})
-    log.info(f"Laozhang video job complete [{job_id}] cost=${total_cost:.4f}")
+    log.info(f"Laozhang video complete [{job_id}] cost=${total_cost:.4f}")
 
     if GOOGLE_SA_JSON and GOOGLE_DRIVE_FOLDER:
         date_str = datetime.date.today().strftime('%Y%m%d')
