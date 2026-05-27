@@ -358,7 +358,13 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
 
       <!-- IMAGES TAB -->
       <div id="timages" class="pscroll">
-        <!-- MAIN IMAGE PANEL (model selection determines which API is used) -->
+        <!-- IMAGE API PROVIDER TOGGLE -->
+        <div class="src-row" style="margin-bottom:14px">
+          <span class="src-lbl">Provider</span>
+          <div class="src-pill active" id="img-src-lz" onclick="setImageProvider('laozhang')">⚡ Laozhang</div>
+          <div class="src-pill" id="img-src-kie" onclick="setImageProvider('kie')">KIE</div>
+        </div>
+        <!-- IMAGE GENERATION PANEL -->
         <div id="ssd">
           <div class="fg">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -383,34 +389,34 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
           <div class="fg">
             <label class="fl">Model</label>
             <select id="sd-m">
-              <optgroup label="Seedream (Laozhang)">
+              <optgroup label="── Seedream ──">
                 <option value="seedream/4.5-edit">Seedream 4.5 Edit ✦ refs</option>
                 <option value="seedream/4.5-text-to-image">Seedream 4.5 Text</option>
                 <option value="bytedance/seedream-v4-text-to-image">Seedream 4.0</option>
                 <option value="bytedance/seedream">Seedream 3.0</option>
               </optgroup>
-              <optgroup label="NanoBanana (Laozhang)">
+              <optgroup label="── NanoBanana ──">
                 <option value="nano-banana-pro">NanoBanana Pro ⚡</option>
               </optgroup>
-              <optgroup label="Grok / xAI (Laozhang)">
+              <optgroup label="── Grok / xAI ──">
                 <option value="grok-2-aurora">Grok Aurora</option>
               </optgroup>
-              <optgroup label="Google (Laozhang)">
+              <optgroup label="── Google ──">
                 <option value="imagen-3.0-generate-002">Gemini Imagen 3</option>
               </optgroup>
-              <optgroup label="Flux / Black Forest Labs (Laozhang)">
+              <optgroup label="── Flux / Black Forest Labs ──">
                 <option value="flux-1.1-pro">Flux 1.1 Pro</option>
                 <option value="flux-1-dev">Flux Dev</option>
                 <option value="flux-1-schnell">Flux Schnell ⚡ (Fastest)</option>
               </optgroup>
-              <optgroup label="OpenAI (Laozhang)">
+              <optgroup label="── OpenAI ──">
                 <option value="dall-e-3">DALL-E 3</option>
               </optgroup>
-              <optgroup label="Kolors / KIE">
+              <optgroup label="── Kolors ──">
                 <option value="kolors">Kolors Fast</option>
                 <option value="kolors-virtual-try-on">Kolors Virtual Try-On</option>
               </optgroup>
-              <optgroup label="Kling Image / KIE">
+              <optgroup label="── Kling Image ──">
                 <option value="kling-image/v1-standard">Kling Image Standard</option>
                 <option value="kling-image/v1-pro">Kling Image Pro</option>
               </optgroup>
@@ -906,18 +912,24 @@ let selectedModels = new Set(['kim']);
 let items = [];
 let corsShown = false;
 let hModelFil = 'all', hTypeFil = 'all';
-let videoProvider = 'kie';     // 'laozhang' | 'kie' — KIE is default for video
+let imageProvider = 'laozhang'; // 'laozhang' | 'kie' — switch when one provider is slow/down
+let videoProvider = 'kie';      // 'laozhang' | 'kie' — KIE is default for video
 
-// Returns true if the given image model routes to KIE (not Laozhang)
-function isKieModel(m) {
-  return m.startsWith('kolors') || m.startsWith('kling-image');
+function setImageProvider(p) {
+  imageProvider = p;
+  $('img-src-lz').classList.toggle('active', p === 'laozhang');
+  $('img-src-kie').classList.toggle('active', p === 'kie');
+  // Quality (2K/4K) only applies to Laozhang — hide for KIE
+  if ($('sd-q-row')) $('sd-q-row').style.display = p === 'kie' ? 'none' : '';
+  _updateRefNote();
+  updateCostPreviews();
 }
 
 function _updateRefNote() {
   const note = $('sd-ref-note'); if (!note) return;
   const m = ($('sd-m') || {}).value || '';
-  if (isKieModel(m)) {
-    note.textContent = '(refs not supported for KIE models)';
+  if (imageProvider === 'kie') {
+    note.textContent = '(ref support varies by KIE model)';
     note.style.color = 'var(--muted2)';
   } else if (m === 'seedream/4.5-edit') {
     note.textContent = '✓ sent to API as reference';
@@ -929,13 +941,6 @@ function _updateRefNote() {
     note.textContent = '(optional — may be used as style guide)';
     note.style.color = 'var(--muted2)';
   }
-}
-
-// Toggle quality row visibility — KIE models don't use Laozhang resolution
-function _syncKieOpts() {
-  const m = ($('sd-m') || {}).value || '';
-  const kie = isKieModel(m);
-  if ($('sd-q-row')) $('sd-q-row').style.display = kie ? 'none' : '';
 }
 
 function setVideoProvider(p) {
@@ -1016,8 +1021,7 @@ function initApp() {
   updateApiDot();
   // Auto-sync models from Cuzo Operation if credentials exist
   if (getCuzoJwt()) syncModelsFromCuzo(false);
-  _syncKieOpts();
-  _updateRefNote();
+  setImageProvider('laozhang'); // sets pills, quality row, ref note
 }
 
 // ── MODEL BAR ──
@@ -1161,7 +1165,6 @@ function bindAll() {
   // Custom model toggles
   $('sd-m').addEventListener('change', () => {
     $('sd-mc').style.display=$('sd-m').value==='__c'?'':'none';
-    _syncKieOpts();
     _updateRefNote();
     updateCostPreviews();
   });
@@ -1769,9 +1772,10 @@ async function genSd(mid) {
   const cost=getCost(model);
   const btn=$('sd-gen'); btn.disabled=true;
 
+  // Refs only supported on Laozhang — skip upload when KIE is the active provider
   let refUrls=[];
   const refs=getRefs(mid);
-  if(refs.length>0){
+  if(refs.length>0 && imageProvider==='laozhang'){
     if(!getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings to use reference photos.');btn.disabled=false;btn.textContent='Generate';return;}
     try{
       btn.innerHTML='<div class="spinner"></div>Uploading refs…';
@@ -1787,10 +1791,9 @@ async function genSd(mid) {
     addPend(cid,mid,'image',prompt,'Image '+(i+1)+'/'+cnt,ratio);
     pendingJobs.set(cid,{mid,type:'image',prompt,model,cost,ratio});
   }
-  const provider = isKieModel(model) ? 'kie' : 'laozhang';
-  const res = ($('sd-q').value === 'high') ? '4K' : '2K';
+  const res = (imageProvider === 'laozhang' && $('sd-q').value === 'high') ? '4K' : '2K';
   fetch('/api/generate/image/batch',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({job_ids,prompt,provider,model,resolution:res,ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
+    body:JSON.stringify({job_ids,prompt,provider:imageProvider,model,resolution:res,ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
   }).catch(e=>{ job_ids.forEach(cid=>{pendingJobs.delete(cid);failCard(cid,e.message||'Submit failed');}); });
   btn.disabled=false; btn.textContent='Generate';
 }
