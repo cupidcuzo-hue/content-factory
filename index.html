@@ -1904,6 +1904,16 @@ function addPend(cid, mid, type, prompt, label, ratio) {
   const t=getTarget(mid); t.insertBefore(card,t.firstChild);
   card.scrollIntoView({behavior:'smooth',block:'nearest'});
   updateBadge();
+  // Client-side kill switch — never spin forever if backend hangs/drops
+  const limitMs = type==='video' ? 12*60*1000 : 3*60*1000;
+  setTimeout(() => {
+    if (pendingJobs.has(cid)) {
+      pendingJobs.delete(cid);
+      failCard(cid, type==='video'
+        ? 'Timed out after 12 min — API may be overloaded. Try again.'
+        : 'Timed out after 3 min — API may be overloaded. Try again.');
+    }
+  }, limitMs);
 }
 
 function succCard(cid, mid, type, url, prompt, model, cost) {

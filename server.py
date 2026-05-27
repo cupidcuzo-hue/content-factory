@@ -225,6 +225,8 @@ def upload_to_drive(data: bytes, filename: str, mime_type: str) -> str:
 
 # ── Image generation via Laozhang.ai ─────────────────────────────────────────
 
+IMG_GEN_TIMEOUT = 150  # seconds — eventlet.Timeout kills hung requests reliably
+
 def gen_image(job_id: str, prompt: str, resolution: str, ratio: str,
               model_name: str, ref_urls: list, socket_id: str, model: str = 'nano-banana-pro'):
     """Generate image via Laozhang, emit result immediately, upload to Drive in background."""
@@ -233,41 +235,36 @@ def gen_image(job_id: str, prompt: str, resolution: str, ratio: str,
 
     emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Generating…', 'pct': 10})
 
-    payload = {
-        'model': model,
-        'prompt': prompt,
-        'n': 1,
-        'size': size,
-        'quality': 'hd',
-    }
+    payload = {'model': model, 'prompt': prompt, 'n': 1, 'size': size, 'quality': 'hd'}
     if ref_urls:
         payload['image_input'] = ref_urls
 
     try:
-        r = requests.post(
-            'https://api.laozhang.ai/v1/images/generations',
-            headers={'Authorization': f'Bearer {LAOZHANG_API_KEY}', 'Content-Type': 'application/json'},
-            json=payload,
-            timeout=120,
-        )
+        with eventlet.Timeout(IMG_GEN_TIMEOUT):
+            r = requests.post(
+                'https://api.laozhang.ai/v1/images/generations',
+                headers={'Authorization': f'Bearer {LAOZHANG_API_KEY}', 'Content-Type': 'application/json'},
+                json=payload, timeout=IMG_GEN_TIMEOUT,
+            )
         r.raise_for_status()
         data = r.json()
+        log.info(f"Laozhang image response [{job_id}]: {json.dumps(data)[:300]}")
         img_url = data['data'][0]['url']
         log.info(f"Laozhang image ready [{job_id}]: {img_url[:60]}…")
+    except eventlet.Timeout:
+        log.error(f"Laozhang image timed out [{job_id}] after {IMG_GEN_TIMEOUT}s")
+        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'Timed out after {IMG_GEN_TIMEOUT}s — API overloaded, try again'})
+        return
     except Exception as e:
         log.error(f"Laozhang image gen failed [{job_id}]: {e}")
-        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'Image generation failed — Laozhang API error'})
+        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'Image failed: {e}'})
         return
 
-    # Log cost & emit IMMEDIATELY — user sees result now, no waiting for Drive
     total_cost = log_cost(job_id, 'laozhang', model, 'image', model_name, cost_per)
-    emit_to(socket_id, 'job:complete', {
-        'job_id': job_id, 'url': img_url, 'cost': total_cost, 'provider': 'laozhang'
-    })
+    emit_to(socket_id, 'job:complete', {'job_id': job_id, 'url': img_url, 'cost': total_cost, 'provider': 'laozhang'})
     emit_to(socket_id, 'cost:update', {'today_total': today_total()})
     log.info(f"Image job complete [{job_id}] cost=${total_cost:.4f}")
 
-    # Drive upload in background — never blocks the user
     if GOOGLE_SA_JSON and GOOGLE_DRIVE_FOLDER:
         date_str = datetime.date.today().strftime('%Y%m%d')
         safe_name = model_name.replace(' ', '_').lower()
@@ -291,31 +288,32 @@ def gen_image_batch(job_ids: list, prompt: str, resolution: str, ratio: str,
     for jid in job_ids:
         emit_to(socket_id, 'job:progress', {'job_id': jid, 'status': f'Generating {n} images…', 'pct': 10})
 
-    payload = {
-        'model': model,
-        'prompt': prompt,
-        'n': n,
-        'size': size,
-        'quality': 'hd',
-    }
+    payload = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'hd'}
     if ref_urls:
         payload['image_input'] = ref_urls
 
+    batch_timeout = IMG_GEN_TIMEOUT + n * 30  # extra time per image in batch
     try:
-        r = requests.post(
-            'https://api.laozhang.ai/v1/images/generations',
-            headers={'Authorization': f'Bearer {LAOZHANG_API_KEY}', 'Content-Type': 'application/json'},
-            json=payload,
-            timeout=180,
-        )
+        with eventlet.Timeout(batch_timeout):
+            r = requests.post(
+                'https://api.laozhang.ai/v1/images/generations',
+                headers={'Authorization': f'Bearer {LAOZHANG_API_KEY}', 'Content-Type': 'application/json'},
+                json=payload, timeout=batch_timeout,
+            )
         r.raise_for_status()
         data = r.json()
+        log.info(f"Laozhang batch response [{job_ids[0]}]: {json.dumps(data)[:300]}")
         img_urls = [item['url'] for item in data['data']]
         log.info(f"Laozhang batch ready [{job_ids[0]}…]: {n} images")
+    except eventlet.Timeout:
+        log.error(f"Laozhang batch timed out after {batch_timeout}s")
+        for jid in job_ids:
+            emit_to(socket_id, 'job:failed', {'job_id': jid, 'error': f'Timed out after {batch_timeout}s — API overloaded, try again'})
+        return
     except Exception as e:
         log.error(f"Laozhang batch gen failed: {e}")
         for jid in job_ids:
-            emit_to(socket_id, 'job:failed', {'job_id': jid, 'error': 'Image generation failed — Laozhang API error'})
+            emit_to(socket_id, 'job:failed', {'job_id': jid, 'error': f'Image failed: {e}'})
         return
 
     date_str = datetime.date.today().strftime('%Y%m%d')
@@ -504,13 +502,18 @@ def gen_video_laozhang(job_id: str, prompt: str, model: str, duration: str,
 
     # ── Step 1: Submit ────────────────────────────────────────────────────────
     try:
-        r = requests.post(
-            'https://api.laozhang.ai/v1/videos/generations',
-            headers=headers, json=payload, timeout=60,
-        )
+        with eventlet.Timeout(60):
+            r = requests.post(
+                'https://api.laozhang.ai/v1/videos/generations',
+                headers=headers, json=payload, timeout=60,
+            )
         r.raise_for_status()
         d = r.json()
         log.info(f"Laozhang video submit [{job_id}] → {json.dumps(d)[:300]}")
+    except eventlet.Timeout:
+        log.error(f"Laozhang video submit timed out [{job_id}]")
+        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'Laozhang submit timed out — try again'})
+        return
     except Exception as e:
         log.error(f"Laozhang video submit failed [{job_id}]: {e}")
         emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'Laozhang submit failed: {e}'})
@@ -599,18 +602,22 @@ def gen_image_kie(job_id: str, prompt: str, ratio: str, model_name: str,
     emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Submitting to KIE…', 'pct': 5})
 
     try:
-        r = requests.post(
-            f'{KIE_BASE}/createTask',
-            headers=headers,
-            json={'model': model, 'input': {'prompt': prompt, 'aspect_ratio': ratio}},
-            timeout=30,
-        )
+        with eventlet.Timeout(30):
+            r = requests.post(
+                f'{KIE_BASE}/createTask',
+                headers=headers,
+                json={'model': model, 'input': {'prompt': prompt, 'aspect_ratio': ratio}},
+                timeout=30,
+            )
         r.raise_for_status()
         d = r.json()
         if d.get('code') != 200:
             raise Exception(d.get('msg', 'KIE API error'))
         task_id = d['data']['taskId']
         log.info(f"KIE image task created [{job_id}]: {task_id}")
+    except eventlet.Timeout:
+        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'KIE submit timed out — try again'})
+        return
     except Exception as e:
         log.error(f"KIE image submit failed [{job_id}]: {e}")
         emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'KIE image failed: {e}'})
