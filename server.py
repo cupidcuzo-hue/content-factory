@@ -104,12 +104,13 @@ LAOZHANG_COSTS = {'1K': 0.0125, '2K': 0.025, '4K': 0.050}
 
 # Per-model cost overrides for Laozhang (for models that aren't resolution-priced)
 LAOZHANG_MODEL_COSTS = {
+    'gpt-image-1':             0.040,
+    'dall-e-3':                0.080,
     'grok-2-aurora':           0.070,
     'imagen-3.0-generate-002': 0.050,
     'flux-1.1-pro':            0.050,
     'flux-1-dev':              0.030,
     'flux-1-schnell':          0.010,
-    'dall-e-3':                0.080,
 }
 
 KIE_IMAGE_COSTS = {
@@ -156,6 +157,37 @@ IMG_SIZE_MAP = {
     ('3:4',  '2K'): '768x1024',  ('3:4',  '4K'): '1536x2048', ('3:4',  '1K'): '384x512',
     ('16:9', '2K'): '1820x1024', ('16:9', '4K'): '3640x2048', ('16:9', '1K'): '910x512',
 }
+
+# DALL-E 3 only supports these exact sizes
+DALLE3_SIZE_MAP = {
+    '9:16': '1024x1792', '3:4': '1024x1792', '1:1': '1024x1024',
+    '4:3': '1792x1024', '16:9': '1792x1024',
+}
+
+# gpt-image-1 only supports these exact sizes
+GPTI1_SIZE_MAP = {
+    '9:16': '1024x1536', '3:4': '1024x1536', '1:1': '1024x1024',
+    '4:3': '1536x1024', '16:9': '1536x1024',
+}
+
+# Models that need special parameter handling
+DALLE3_MODELS   = {'dall-e-3'}
+GPTI1_MODELS    = {'gpt-image-1'}
+
+def _lz_payload(model: str, prompt: str, ratio: str, resolution: str, ref_urls: list, n: int = 1) -> dict:
+    """Build correct Laozhang payload for any model — handles size/quality differences."""
+    if model in DALLE3_MODELS:
+        size = DALLE3_SIZE_MAP.get(ratio, '1024x1792')
+        p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'hd'}
+    elif model in GPTI1_MODELS:
+        size = GPTI1_SIZE_MAP.get(ratio, '1024x1536')
+        p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'high'}
+    else:
+        size = IMG_SIZE_MAP.get((ratio, resolution), '1024x1820')
+        p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'hd'}
+    if ref_urls and model not in DALLE3_MODELS and model not in GPTI1_MODELS:
+        p['image_input'] = ref_urls
+    return p
 
 KIE_TIER_MAP = {
     'standard': 'kling/v2-1-standard',
@@ -235,9 +267,7 @@ def gen_image(job_id: str, prompt: str, resolution: str, ratio: str,
 
     emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Generating…', 'pct': 10})
 
-    payload = {'model': model, 'prompt': prompt, 'n': 1, 'size': size, 'quality': 'hd'}
-    if ref_urls:
-        payload['image_input'] = ref_urls
+    payload = _lz_payload(model, prompt, ratio, resolution, ref_urls, n=1)
 
     try:
         with eventlet.Timeout(IMG_GEN_TIMEOUT):
@@ -294,9 +324,7 @@ def gen_image_batch(job_ids: list, prompt: str, resolution: str, ratio: str,
     for jid in job_ids:
         emit_to(socket_id, 'job:progress', {'job_id': jid, 'status': f'Generating {n} images…', 'pct': 10})
 
-    payload = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'hd'}
-    if ref_urls:
-        payload['image_input'] = ref_urls
+    payload = _lz_payload(model, prompt, ratio, resolution, ref_urls, n=n)
 
     batch_timeout = IMG_GEN_TIMEOUT + n * 30  # extra time per image in batch
     try:
@@ -889,10 +917,11 @@ def api_debug_image():
     prompt = request.args.get('prompt', 'a beautiful woman smiling, studio photography')
     key_hint = (LAOZHANG_API_KEY[:8] + '…') if LAOZHANG_API_KEY else 'NOT SET'
     try:
+        payload = _lz_payload(model, prompt, '9:16', '2K', [], n=1)
         r = requests.post(
             'https://api.laozhang.ai/v1/images/generations',
             headers={'Authorization': f'Bearer {LAOZHANG_API_KEY}', 'Content-Type': 'application/json'},
-            json={'model': model, 'prompt': prompt, 'n': 1, 'size': '1024x1820', 'quality': 'hd'},
+            json=payload,
             timeout=60,
         )
         try:
