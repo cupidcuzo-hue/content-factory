@@ -358,24 +358,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
 
       <!-- IMAGES TAB -->
       <div id="timages" class="pscroll">
-        <!-- SOURCE PICKER -->
-        <div class="src-row">
-          <span class="src-lbl">Source</span>
-          <div class="src-pill active" id="src-lz" onclick="setImageProvider('laozhang')">⚡ Laozhang</div>
-          <div class="src-pill" id="src-kie" onclick="setImageProvider('kie')">KIE</div>
-        </div>
-        <!-- KIE image model (shown when KIE selected) -->
-        <div id="kie-img-opts" style="display:none;margin-bottom:14px">
-          <div class="fg" style="margin:0">
-            <label class="fl">KIE Image Model</label>
-            <select id="kie-img-m" onchange="updateCostPreviews()">
-              <option value="kolors">Kolors (Fast)</option>
-              <option value="kling-image/v1-standard">Kling Image Standard</option>
-              <option value="kling-image/v1-pro">Kling Image Pro</option>
-            </select>
-          </div>
-        </div>
-        <!-- MAIN IMAGE PANEL (always shown, model controls which API is used) -->
+        <!-- MAIN IMAGE PANEL (model selection determines which API is used) -->
         <div id="ssd">
           <div class="fg">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -397,7 +380,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
             <textarea id="sd-p" placeholder="Describe the image in detail…"></textarea>
           </div>
           <div class="fg"><label class="fl">Negative Prompt <span>(optional)</span></label><textarea id="sd-n" class="sm" placeholder="ugly, blurry, watermark, low quality…"></textarea></div>
-          <div class="fg" id="sd-model-row">
+          <div class="fg">
             <label class="fl">Model</label>
             <select id="sd-m">
               <optgroup label="Seedream (Laozhang)">
@@ -409,19 +392,27 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
               <optgroup label="NanoBanana (Laozhang)">
                 <option value="nano-banana-pro">NanoBanana Pro ⚡</option>
               </optgroup>
-              <optgroup label="Grok (xAI)">
+              <optgroup label="Grok / xAI (Laozhang)">
                 <option value="grok-2-aurora">Grok Aurora</option>
               </optgroup>
-              <optgroup label="Google">
+              <optgroup label="Google (Laozhang)">
                 <option value="imagen-3.0-generate-002">Gemini Imagen 3</option>
               </optgroup>
-              <optgroup label="Flux (Black Forest Labs)">
+              <optgroup label="Flux / Black Forest Labs (Laozhang)">
                 <option value="flux-1.1-pro">Flux 1.1 Pro</option>
                 <option value="flux-1-dev">Flux Dev</option>
                 <option value="flux-1-schnell">Flux Schnell ⚡ (Fastest)</option>
               </optgroup>
-              <optgroup label="OpenAI">
+              <optgroup label="OpenAI (Laozhang)">
                 <option value="dall-e-3">DALL-E 3</option>
+              </optgroup>
+              <optgroup label="Kolors / KIE">
+                <option value="kolors">Kolors Fast</option>
+                <option value="kolors-virtual-try-on">Kolors Virtual Try-On</option>
+              </optgroup>
+              <optgroup label="Kling Image / KIE">
+                <option value="kling-image/v1-standard">Kling Image Standard</option>
+                <option value="kling-image/v1-pro">Kling Image Pro</option>
               </optgroup>
               <option value="__c">Custom…</option>
             </select>
@@ -429,7 +420,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
           </div>
           <div class="row2">
             <div class="fg"><label class="fl">Aspect Ratio</label><select id="sd-r"><option value="9:16">9:16</option><option value="3:4">3:4</option><option value="1:1">1:1</option><option value="4:3">4:3</option><option value="16:9">16:9</option><option value="21:9">21:9</option></select></div>
-            <div class="fg"><label class="fl">Quality</label><select id="sd-q"><option value="basic">Basic (2K)</option><option value="high">High (4K)</option></select></div>
+            <div class="fg" id="sd-q-row"><label class="fl">Quality</label><select id="sd-q"><option value="basic">Basic (2K)</option><option value="high">High (4K)</option></select></div>
           </div>
           <div class="row2">
             <div class="fg"><label class="fl">Count</label><select id="sd-c"><option value="1">1</option><option value="2">2</option><option value="4" selected>4</option><option value="6">6</option></select></div>
@@ -890,6 +881,7 @@ const COSTS = {
   'dall-e-3':                            0.080,
   // ── KIE image ──
   'kolors':                              0.030,
+  'kolors-virtual-try-on':              0.050,
   'kling-image/v1-standard':             0.035,
   'kling-image/v1-pro':                  0.060,
   // ── KIE video ──
@@ -914,29 +906,18 @@ let selectedModels = new Set(['kim']);
 let items = [];
 let corsShown = false;
 let hModelFil = 'all', hTypeFil = 'all';
-let imageProvider = 'laozhang'; // 'laozhang' | 'kie'
 let videoProvider = 'kie';     // 'laozhang' | 'kie' — KIE is default for video
 
-function setImageProvider(p) {
-  imageProvider = p;
-  $('src-lz').classList.toggle('active', p === 'laozhang');
-  $('src-kie').classList.toggle('active', p === 'kie');
-  // KIE image-specific model dropdown
-  $('kie-img-opts').style.display = p === 'kie' ? '' : 'none';
-  // ssd always visible — it's the universal image panel now (NanoBanana merged in)
-  $('ssd').style.display = '';
-  // When KIE: hide the Laozhang model row (KIE has its own picker above)
-  if ($('sd-model-row')) $('sd-model-row').style.display = p === 'kie' ? 'none' : '';
-  // Update ref note based on current model + provider
-  _updateRefNote();
-  updateCostPreviews();
+// Returns true if the given image model routes to KIE (not Laozhang)
+function isKieModel(m) {
+  return m.startsWith('kolors') || m.startsWith('kling-image');
 }
 
 function _updateRefNote() {
   const note = $('sd-ref-note'); if (!note) return;
   const m = ($('sd-m') || {}).value || '';
-  if (imageProvider === 'kie') {
-    note.textContent = '(optional — ref support varies by KIE model)';
+  if (isKieModel(m)) {
+    note.textContent = '(refs not supported for KIE models)';
     note.style.color = 'var(--muted2)';
   } else if (m === 'seedream/4.5-edit') {
     note.textContent = '✓ sent to API as reference';
@@ -948,6 +929,13 @@ function _updateRefNote() {
     note.textContent = '(optional — may be used as style guide)';
     note.style.color = 'var(--muted2)';
   }
+}
+
+// Toggle quality row visibility — KIE models don't use Laozhang resolution
+function _syncKieOpts() {
+  const m = ($('sd-m') || {}).value || '';
+  const kie = isKieModel(m);
+  if ($('sd-q-row')) $('sd-q-row').style.display = kie ? 'none' : '';
 }
 
 function setVideoProvider(p) {
@@ -1028,6 +1016,7 @@ function initApp() {
   updateApiDot();
   // Auto-sync models from Cuzo Operation if credentials exist
   if (getCuzoJwt()) syncModelsFromCuzo(false);
+  _syncKieOpts();
   _updateRefNote();
 }
 
@@ -1172,6 +1161,7 @@ function bindAll() {
   // Custom model toggles
   $('sd-m').addEventListener('change', () => {
     $('sd-mc').style.display=$('sd-m').value==='__c'?'':'none';
+    _syncKieOpts();
     _updateRefNote();
     updateCostPreviews();
   });
@@ -1517,22 +1507,10 @@ function buildSettingsRefs() {
 
 // ── COST ──
 function getCost(model) { return COSTS[model]||0.05; }
-const KIE_IMAGE_COSTS = {kolors:0.030,'kolors-virtual-try-on':0.050,'kling-image/v1-standard':0.035,'kling-image/v1-pro':0.060};
-function getKieImgCost(m){return KIE_IMAGE_COSTS[m]||0.030;}
-
 function updateCostPreviews() {
-  const imgCnt = parseInt(($('sd-c')||{}).value)||4;
-
-  if(imageProvider==='kie') {
-    const km=($('kie-img-m')||{}).value||'kolors';
-    const kc=getKieImgCost(km);
-    const label=`Est. cost: <strong>~${f$(kc*imgCnt)}</strong> for ${imgCnt} image${imgCnt>1?'s':''}`;
-    if($('sd-cp')) $('sd-cp').innerHTML=label;
-  } else {
-    const sdm=$('sd-m').value==='__c'?($('sd-mc').value||'seedream/4.5-text-to-image'):$('sd-m').value;
-    const sdc=parseInt($('sd-c').value)||4;
-    if($('sd-cp')) $('sd-cp').innerHTML=`Est. cost: <strong>~${f$(getCost(sdm)*sdc)}</strong> for ${sdc} image${sdc>1?'s':''}`;
-  }
+  const sdm = $('sd-m').value==='__c' ? ($('sd-mc').value||'seedream/4.5-text-to-image') : $('sd-m').value;
+  const sdc = parseInt(($('sd-c')||{}).value)||4;
+  if($('sd-cp')) $('sd-cp').innerHTML=`Est. cost: <strong>~${f$(getCost(sdm)*sdc)}</strong> for ${sdc} image${sdc>1?'s':''}`;
 
   const vim = videoProvider === 'laozhang'
     ? (($('lz-vid-m')||{}).value||'wan2.1-14b-720p')
@@ -1809,10 +1787,10 @@ async function genSd(mid) {
     addPend(cid,mid,'image',prompt,'Image '+(i+1)+'/'+cnt,ratio);
     pendingJobs.set(cid,{mid,type:'image',prompt,model,cost,ratio});
   }
-  const kieModel = imageProvider==='kie' ? (($('kie-img-m')||{}).value||'kolors') : null;
+  const provider = isKieModel(model) ? 'kie' : 'laozhang';
   const res = ($('sd-q').value === 'high') ? '4K' : '2K';
   fetch('/api/generate/image/batch',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({job_ids,prompt,provider:imageProvider,model:kieModel||model,resolution:res,ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
+    body:JSON.stringify({job_ids,prompt,provider,model,resolution:res,ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
   }).catch(e=>{ job_ids.forEach(cid=>{pendingJobs.delete(cid);failCard(cid,e.message||'Submit failed');}); });
   btn.disabled=false; btn.textContent='Generate';
 }
