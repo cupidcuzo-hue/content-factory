@@ -976,6 +976,41 @@ def api_debug_image():
         return jsonify({'key_hint': key_hint, 'model': model, 'error': str(e)}), 502
 
 
+@app.route('/api/debug/kie-image')
+def api_debug_kie_image():
+    """Full KIE image generation test — submits real task and polls to completion."""
+    model = request.args.get('model', 'kolors')
+    prompt = request.args.get('prompt', 'a beautiful woman smiling, studio photography')
+    key_hint = (KIE_API_KEY[:8] + '…') if KIE_API_KEY else 'NOT SET'
+    headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
+    try:
+        r = requests.post(f'{KIE_BASE}/createTask', headers=headers,
+                          json={'model': model, 'input': {'prompt': prompt, 'aspect_ratio': '9:16'}},
+                          timeout=30)
+        d = r.json()
+        if d.get('code') != 200:
+            return jsonify({'key_hint': key_hint, 'model': model, 'submit': d})
+        task_id = d['data']['taskId']
+        # Poll up to 60s
+        for _ in range(20):
+            time.sleep(3)
+            pr = requests.get(f'{KIE_BASE}/recordInfo?taskId={task_id}', headers=headers, timeout=15)
+            pd = pr.json()
+            if isinstance(pd['data'].get('resultJson'), str):
+                try: pd['data']['result'] = json.loads(pd['data']['resultJson'])
+                except: pass
+            state = pd['data'].get('state')
+            if state == 'success':
+                res = pd['data'].get('result', {})
+                urls = res.get('resultUrls') or [v['url'] for v in res.get('images', [])] or ([res['url']] if res.get('url') else [])
+                return jsonify({'key_hint': key_hint, 'model': model, 'task_id': task_id, 'status': 'success', 'url': urls[0] if urls else None})
+            if state == 'fail':
+                return jsonify({'key_hint': key_hint, 'model': model, 'task_id': task_id, 'status': 'fail', 'data': pd['data']})
+        return jsonify({'key_hint': key_hint, 'model': model, 'task_id': task_id, 'status': 'still_polling — check manually'})
+    except Exception as e:
+        return jsonify({'key_hint': key_hint, 'model': model, 'error': str(e)}), 502
+
+
 @app.route('/api/test/all')
 def api_test_all():
     results = {}
