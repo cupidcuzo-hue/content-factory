@@ -43,32 +43,58 @@ log = logging.getLogger(__name__)
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
+_DB_PATH = DB_PATH  # may be overridden if preferred path fails
+
 def get_db():
-    db_dir = os.path.dirname(DB_PATH)
+    db_dir = os.path.dirname(_DB_PATH)
     if db_dir:
-        os.makedirs(db_dir, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        try:
+            os.makedirs(db_dir, exist_ok=True)
+        except OSError as e:
+            log.warning(f"Cannot create DB directory {db_dir}: {e}")
+    conn = sqlite3.connect(_DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
 def init_db():
-    with get_db() as db:
-        db.execute('''
-            CREATE TABLE IF NOT EXISTS cost_log (
-                id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                job_id       TEXT,
-                provider     TEXT,
-                model        TEXT,
-                content_type TEXT,
-                model_name   TEXT,
-                quantity     INTEGER DEFAULT 1,
-                cost_per_unit REAL,
-                total_cost   REAL,
-                generated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        db.commit()
-    log.info(f"Database ready at {DB_PATH}")
+    global _DB_PATH
+    try:
+        with get_db() as db:
+            db.execute('''
+                CREATE TABLE IF NOT EXISTS cost_log (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id       TEXT,
+                    provider     TEXT,
+                    model        TEXT,
+                    content_type TEXT,
+                    model_name   TEXT,
+                    quantity     INTEGER DEFAULT 1,
+                    cost_per_unit REAL,
+                    total_cost   REAL,
+                    generated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            db.commit()
+        log.info(f"Database ready at {_DB_PATH}")
+    except Exception as e:
+        # Fall back to an in-process temp DB rather than crashing the server
+        log.warning(f"DB init failed at {_DB_PATH} ({e}) — falling back to /tmp/content_factory.db")
+        _DB_PATH = '/tmp/content_factory.db'
+        try:
+            with get_db() as db:
+                db.execute('''
+                    CREATE TABLE IF NOT EXISTS cost_log (
+                        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                        job_id       TEXT, provider TEXT, model TEXT, content_type TEXT,
+                        model_name   TEXT, quantity INTEGER DEFAULT 1,
+                        cost_per_unit REAL, total_cost REAL,
+                        generated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                db.commit()
+            log.info(f"Database ready (fallback) at {_DB_PATH}")
+        except Exception as e2:
+            log.error(f"Fallback DB also failed: {e2} — cost tracking disabled")
 
 init_db()
 
