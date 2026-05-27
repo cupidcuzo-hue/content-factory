@@ -256,8 +256,14 @@ def gen_image(job_id: str, prompt: str, resolution: str, ratio: str,
         emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'Timed out after {IMG_GEN_TIMEOUT}s — API overloaded, try again'})
         return
     except Exception as e:
-        log.error(f"Laozhang image gen failed [{job_id}]: {e}")
-        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'Image failed: {e}'})
+        body = ''
+        try:
+            if hasattr(e, 'response') and e.response is not None:
+                body = e.response.text[:300]
+        except Exception:
+            pass
+        log.error(f"Laozhang image gen failed [{job_id}]: {e} | body={body}")
+        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'Laozhang error: {body or str(e)}'})
         return
 
     total_cost = log_cost(job_id, 'laozhang', model, 'image', model_name, cost_per)
@@ -311,9 +317,15 @@ def gen_image_batch(job_ids: list, prompt: str, resolution: str, ratio: str,
             emit_to(socket_id, 'job:failed', {'job_id': jid, 'error': f'Timed out after {batch_timeout}s — API overloaded, try again'})
         return
     except Exception as e:
-        log.error(f"Laozhang batch gen failed: {e}")
+        body = ''
+        try:
+            if hasattr(e, 'response') and e.response is not None:
+                body = e.response.text[:300]
+        except Exception:
+            pass
+        log.error(f"Laozhang batch gen failed: {e} | body={body}")
         for jid in job_ids:
-            emit_to(socket_id, 'job:failed', {'job_id': jid, 'error': f'Image failed: {e}'})
+            emit_to(socket_id, 'job:failed', {'job_id': jid, 'error': f'Laozhang error: {body or str(e)}'})
         return
 
     date_str = datetime.date.today().strftime('%Y%m%d')
@@ -444,7 +456,7 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
 
     if not video_url:
         log.error(f"Video job failed [{job_id}] after retry: {err}")
-        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'Video generation failed — KIE API error'})
+        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'KIE video failed: {err}'})
         return
 
     # Emit IMMEDIATELY — user sees result now, no waiting for Drive
@@ -619,8 +631,14 @@ def gen_image_kie(job_id: str, prompt: str, ratio: str, model_name: str,
         emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'KIE submit timed out — try again'})
         return
     except Exception as e:
-        log.error(f"KIE image submit failed [{job_id}]: {e}")
-        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'KIE image failed: {e}'})
+        body = ''
+        try:
+            if hasattr(e, 'response') and e.response is not None:
+                body = e.response.text[:300]
+        except Exception:
+            pass
+        log.error(f"KIE image submit failed [{job_id}]: {e} | body={body}")
+        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'KIE error: {body or str(e)}'})
         return
 
     deadline = time.time() + 180
@@ -826,17 +844,21 @@ def api_costs_log():
 
 @app.route('/api/test/laozhang')
 def api_test_laozhang():
+    model = request.args.get('model', 'seedream/4.5-text-to-image')
     try:
         r = requests.post(
             'https://api.laozhang.ai/v1/images/generations',
             headers={'Authorization': f'Bearer {LAOZHANG_API_KEY}', 'Content-Type': 'application/json'},
-            json={'model': 'nano-banana-pro', 'prompt': 'connectivity test', 'n': 1, 'size': '512x910', 'quality': 'hd'},
-            timeout=15,
+            json={'model': model, 'prompt': 'a beautiful woman, photography', 'n': 1, 'size': '512x910', 'quality': 'hd'},
+            timeout=30,
         )
-        # 400/422/503 = API reachable (bad params or rate limit) — key is still being read
-        ok = r.status_code in (200, 201, 400, 422, 503)
+        try:
+            body = r.json()
+        except Exception:
+            body = r.text[:500]
+        ok = r.status_code in (200, 201)
         return jsonify({'status': 'ok' if ok else 'error', 'provider': 'laozhang',
-                        'model': 'nano-banana-pro', 'http': r.status_code})
+                        'model': model, 'http': r.status_code, 'response': body})
     except Exception as e:
         return jsonify({'status': 'error', 'provider': 'laozhang', 'error': str(e)}), 502
 
@@ -849,11 +871,42 @@ def api_test_kie():
             headers={'Authorization': f'Bearer {KIE_API_KEY}'},
             timeout=10,
         )
+        try:
+            body = r.json()
+        except Exception:
+            body = r.text[:500]
         ok = r.status_code in (200, 400, 404, 422)
         return jsonify({'status': 'ok' if ok else 'error', 'provider': 'kie',
-                        'model': 'kling-2.1', 'http': r.status_code})
+                        'http': r.status_code, 'response': body})
     except Exception as e:
         return jsonify({'status': 'error', 'provider': 'kie', 'error': str(e)}), 502
+
+
+@app.route('/api/debug/image')
+def api_debug_image():
+    """Full diagnostic — tries a real generation and returns raw API response. Do NOT use in production load."""
+    model = request.args.get('model', 'seedream/4.5-text-to-image')
+    prompt = request.args.get('prompt', 'a beautiful woman smiling, studio photography')
+    key_hint = (LAOZHANG_API_KEY[:8] + '…') if LAOZHANG_API_KEY else 'NOT SET'
+    try:
+        r = requests.post(
+            'https://api.laozhang.ai/v1/images/generations',
+            headers={'Authorization': f'Bearer {LAOZHANG_API_KEY}', 'Content-Type': 'application/json'},
+            json={'model': model, 'prompt': prompt, 'n': 1, 'size': '1024x1820', 'quality': 'hd'},
+            timeout=60,
+        )
+        try:
+            body = r.json()
+        except Exception:
+            body = r.text[:2000]
+        return jsonify({
+            'key_hint': key_hint,
+            'model': model,
+            'http': r.status_code,
+            'response': body,
+        })
+    except Exception as e:
+        return jsonify({'key_hint': key_hint, 'model': model, 'error': str(e)}), 502
 
 
 @app.route('/api/test/all')

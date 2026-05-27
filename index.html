@@ -845,8 +845,24 @@ function initSocket() {
       if (el) el.textContent = '~$' + today_total.toFixed(2);
     });
 
-    socket.on('connect', () => updateApiDot('ok'));
-    socket.on('disconnect', () => updateApiDot('err'));
+    socket.on('connect', () => {
+      updateApiDot('ok');
+      // On reconnect, fail any cards that were pending — backend lost them on restart
+      if (pendingJobs.size > 0) {
+        for (const [cid] of pendingJobs.entries()) {
+          failCard(cid, 'Server restarted — please generate again');
+        }
+        pendingJobs.clear();
+      }
+    });
+    socket.on('disconnect', () => {
+      updateApiDot('err');
+      // Immediately fail all pending cards — backend lost them on disconnect
+      for (const [cid] of pendingJobs.entries()) {
+        failCard(cid, 'Connection lost — server restarted, please try again');
+      }
+      pendingJobs.clear();
+    });
   } catch(e) {
     console.warn('Socket.io init failed:', e);
     socket = null;
