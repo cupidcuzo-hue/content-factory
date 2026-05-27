@@ -181,7 +181,7 @@ def _lz_payload(model: str, prompt: str, ratio: str, resolution: str, ref_urls: 
         p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'hd'}
     elif model in GPTI1_MODELS:
         size = GPTI1_SIZE_MAP.get(ratio, '1024x1536')
-        p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'high', 'response_format': 'url'}
+        p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'high'}
     else:
         size = IMG_SIZE_MAP.get((ratio, resolution), '1024x1820')
         p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'hd'}
@@ -216,6 +216,22 @@ def today_total():
             "SELECT COALESCE(SUM(total_cost),0) as t FROM cost_log WHERE date(generated_at)=?", (today,)
         ).fetchone()
     return float(row['t']) if row else 0.0
+
+# ── In-memory image cache (for b64 responses like gpt-image-1) ────────────────
+# Stored as raw bytes, served via /api/img/<id>. Cleared on server restart — fine for VA workflow.
+_img_cache: dict[str, bytes] = {}
+
+def cache_img(job_id: str, data_bytes: bytes) -> str:
+    """Store image bytes and return a server-relative URL for it."""
+    _img_cache[job_id] = data_bytes
+    return f'/api/img/{job_id}'
+
+@app.route('/api/img/<job_id>')
+def serve_cached_img(job_id):
+    data = _img_cache.get(job_id)
+    if not data:
+        return 'Image not found (server restarted)', 404
+    return send_file(io.BytesIO(data), mimetype='image/png')
 
 # ── Socket.io emit helper ──────────────────────────────────────────────────────
 
@@ -280,15 +296,14 @@ def gen_image(job_id: str, prompt: str, resolution: str, ratio: str,
         data = r.json()
         log.info(f"Laozhang image response [{job_id}]: {json.dumps(data)[:300]}")
         item = data['data'][0]
-        img_url = item.get('url') or item.get('revised_prompt') and None  # url first
+        img_url = item.get('url')
         if not img_url and item.get('b64_json'):
-            # Model returned base64 — shouldn't happen with response_format=url but handle it
             import base64
             img_bytes = base64.b64decode(item['b64_json'])
-            drive_url = upload_to_drive(img_bytes, f"lz_{job_id[:8]}.png", 'image/png')
-            img_url = drive_url
+            img_url = cache_img(job_id, img_bytes)
+            log.info(f"gpt-image-1 b64 cached [{job_id}] → {img_url}")
         if not img_url:
-            raise Exception(f"No URL in response: {json.dumps(data)[:200]}")
+            raise Exception(f"No URL or b64 in response: {json.dumps(data)[:200]}")
         log.info(f"Laozhang image ready [{job_id}]: {img_url[:60]}…")
     except eventlet.Timeout:
         log.error(f"Laozhang image timed out [{job_id}] after {IMG_GEN_TIMEOUT}s")
@@ -346,7 +361,15 @@ def gen_image_batch(job_ids: list, prompt: str, resolution: str, ratio: str,
         r.raise_for_status()
         data = r.json()
         log.info(f"Laozhang batch response [{job_ids[0]}]: {json.dumps(data)[:300]}")
-        img_urls = [item.get('url') or '' for item in data['data']]
+        img_urls = []
+        for idx, item in enumerate(data['data']):
+            u = item.get('url')
+            if not u and item.get('b64_json'):
+                import base64
+                img_bytes = base64.b64decode(item['b64_json'])
+                jid = job_ids[idx] if idx < len(job_ids) else f'{job_ids[0]}-{idx}'
+                u = cache_img(jid, img_bytes)
+            img_urls.append(u or '')
         log.info(f"Laozhang batch ready [{job_ids[0]}…]: {n} images")
     except eventlet.Timeout:
         log.error(f"Laozhang batch timed out after {batch_timeout}s")
@@ -937,10 +960,16 @@ def api_debug_image():
             body = r.json()
         except Exception:
             body = r.text[:2000]
+        # If b64_json returned, summarize instead of dumping megabytes
+        if isinstance(body, dict) and body.get('data'):
+            for item in body['data']:
+                if item.get('b64_json'):
+                    item['b64_json'] = f'<{len(item["b64_json"])} chars of base64>'
         return jsonify({
             'key_hint': key_hint,
             'model': model,
             'http': r.status_code,
+            'payload_sent': payload,
             'response': body,
         })
     except Exception as e:
