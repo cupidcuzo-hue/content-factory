@@ -784,8 +784,10 @@ _KIE_NB_MODELS = {'nano-banana-pro', 'nano-banana-2', 'google/nano-banana'}
 def _kie_image_input(model: str, prompt: str, ratio: str, ref_urls: list | None = None) -> dict:
     """Build correct KIE input payload for each image model."""
     if model in _KIE_NB_MODELS:
-        return {'prompt': prompt, 'image_input': ref_urls or [], 'aspect_ratio': ratio,
-                'resolution': '2K', 'output_format': 'png'}
+        inp = {'prompt': prompt, 'aspect_ratio': ratio, 'resolution': '2K', 'output_format': 'png'}
+        if ref_urls:  # omit image_input entirely when empty — KIE 500s on []
+            inp['image_input'] = ref_urls
+        return inp
     if model == 'grok-imagine/text-to-image':
         # Grok only supports: 2:3, 3:2, 1:1, 16:9, 9:16
         safe_ratio = ratio if ratio in ('1:1', '9:16', '16:9', '3:4', '4:3') else '1:1'

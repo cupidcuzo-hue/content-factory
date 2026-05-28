@@ -562,7 +562,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
             <select id="vi-m">
               <option value="kling-2.6/text-to-video" selected>⚡ Kling 2.6 (Text-to-Video)</option>
               <option value="kling/v2-1-master-text-to-video">Kling v2.1 Master T2V</option>
-              <option value="kling-3.0/video">Kling 3.0 (May be unavailable)</option>
+              <option value="kling-3.0/video">Kling 3.0 ⚠️ (KIE server down)</option>
               <option value="kling/v2-1-standard">Kling v2.1 Standard [Start Frame]</option>
               <option value="kling/v2-1-pro">Kling v2.1 Pro [Start Frame]</option>
               <option value="kling/v2-1-master">Kling v2.1 Master [Start Frame]</option>
@@ -1023,6 +1023,23 @@ function updateKieModeRow() {
   const m = $('vi-m') ? $('vi-m').value : '';
   const showMode = KIE_I2V_MODELS.has(m) || m === '__c'; // show for i2v or custom
   if ($('vi-mode-row')) $('vi-mode-row').style.display = (videoProvider === 'kie' && showMode) ? '' : 'none';
+  // Duration: kling-2.6 and kling-3.0 only accept 5s or 10s — restrict dropdown
+  const dur = $('vi-d');
+  if(!dur) return;
+  const fiveAndTen = ['kling-2.6/text-to-video','kling-3.0/video'].includes(m);
+  const cur = dur.value;
+  if(fiveAndTen){
+    dur.innerHTML='<option value="5">5s</option><option value="10">10s</option>';
+    dur.value = ['5','10'].includes(cur) ? cur : '5';
+  } else {
+    // Full 5-15s range for master/pro/standard/custom
+    if(dur.options.length < 5){
+      let html='';
+      for(let i=5;i<=15;i++) html+=`<option value="${i}">${i}s</option>`;
+      dur.innerHTML=html;
+      dur.value=cur||'5';
+    }
+  }
 }
 
 function setVideoProvider(p) {
@@ -1856,10 +1873,10 @@ async function genSd(mid) {
   const cost=getCost(model);
   const btn=$('sd-gen'); btn.disabled=true;
 
-  // Refs only supported on Laozhang — skip upload when KIE is the active provider
+  // Upload ref photos for both Laozhang and KIE (KIE uses image_input for nano-banana-pro)
   let refUrls=[];
   const refs=getRefs(mid);
-  if(refs.length>0 && imageProvider==='laozhang'){
+  if(refs.length>0){
     if(!getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings to use reference photos.');btn.disabled=false;btn.textContent='Generate';return;}
     try{
       btn.innerHTML='<div class="spinner"></div>Uploading refs…';
