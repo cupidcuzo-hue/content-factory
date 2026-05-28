@@ -433,7 +433,14 @@ def gen_image_batch(job_ids: list, prompt: str, resolution: str, ratio: str,
     date_str = datetime.date.today().strftime('%Y%m%d')
     safe_name = model_name.replace(' ', '_').lower()
 
-    for job_id, img_url in zip(job_ids, img_urls):
+    # Build (job_id, url, cached_bytes) triples for emit + Drive upload
+    triples = []
+    for idx, (job_id, img_url) in enumerate(zip(job_ids, img_urls)):
+        # Recover cached bytes if this was a b64 image (url starts with /api/img/)
+        b64_bytes = _img_cache.get(job_id) if img_url.startswith('/api/img/') else None
+        triples.append((job_id, img_url, b64_bytes))
+
+    for job_id, img_url, _ in triples:
         total_cost = log_cost(job_id, 'laozhang', model, 'image', model_name, cost_per)
         emit_to(socket_id, 'job:complete', {
             'job_id': job_id, 'url': img_url, 'cost': total_cost, 'provider': 'laozhang'
@@ -442,13 +449,16 @@ def gen_image_batch(job_ids: list, prompt: str, resolution: str, ratio: str,
 
     emit_to(socket_id, 'cost:update', {'today_total': today_total()})
 
-    # Drive uploads in background
+    # Drive uploads in background — use cached bytes for b64 images to avoid relative-URL issue
     if GOOGLE_SA_JSON and GOOGLE_DRIVE_FOLDER:
-        def _bg_batch(pairs=list(zip(job_ids, img_urls))):
-            for jid, url in pairs:
+        def _bg_batch(t=triples):
+            for jid, url, data_bytes in t:
                 try:
-                    img_data = requests.get(url, timeout=60).content
-                    upload_to_drive(img_data, f"{safe_name}_image_{date_str}_{jid[:8]}.jpg", 'image/jpeg')
+                    is_b64 = data_bytes is not None
+                    ext  = 'png' if is_b64 else 'jpg'
+                    mime = 'image/png' if is_b64 else 'image/jpeg'
+                    img_data = data_bytes if is_b64 else requests.get(url, timeout=60).content
+                    upload_to_drive(img_data, f"{safe_name}_image_{date_str}_{jid[:8]}.{ext}", mime)
                 except Exception as ex:
                     log.warning(f"BG Drive upload failed [{jid}]: {ex}")
         threading.Thread(target=_bg_batch, daemon=True).start()

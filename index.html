@@ -985,8 +985,8 @@ function _updateRefNote() {
 
 function setVideoProvider(p) {
   videoProvider = p;
-  $('vsrc-lz').classList.toggle('active', p === 'laozhang');
-  $('vsrc-kie').classList.toggle('active', p === 'kie');
+  if($('vsrc-lz')) $('vsrc-lz').classList.toggle('active', p === 'laozhang');
+  if($('vsrc-kie')) $('vsrc-kie').classList.toggle('active', p === 'kie');
   // Laozhang model dropdown vs KIE model row
   $('lz-vid-opts').style.display  = p === 'laozhang' ? '' : 'none';
   if ($('vi-model-row')) $('vi-model-row').style.display = p === 'laozhang' ? 'none' : '';
@@ -1166,7 +1166,7 @@ async function syncModelsFromCuzo(showResult) {
     });
     saveModels();
     buildModelBar();
-    renderModelManager();
+    buildModelList();
     buildSettingsRefs();
     updateCuzoSyncChip('connected');
     if (showResult) { $('cuzo-tr').className='tresult ok'; $('cuzo-tr').textContent=`✓ Synced ${apiModels.length} models from Cuzo`; }
@@ -1798,7 +1798,7 @@ async function genMc(mid) {
       mc_orientation: model!=='kling-3.0/motion-control' ? orient : null,
       mode,
       model_name: m?.name||mid,
-      socket_id: socket.id
+      socket_id: socket?.id || ''
     })
   }).catch(e=>{ pendingJobs.delete(cid); failCard(cid, e.message||'Submit failed'); });
 
