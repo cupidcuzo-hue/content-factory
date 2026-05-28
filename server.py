@@ -242,21 +242,35 @@ def today_total():
         ).fetchone()
     return float(row['t']) if row else 0.0
 
-# ── In-memory image cache (for b64 responses like gpt-image-1) ────────────────
-# Stored as raw bytes, served via /api/img/<id>. Cleared on server restart — fine for VA workflow.
+# ── Image cache (b64 responses like gpt-image-2 / Gemini) ────────────────────
+# Primary: write to /tmp/cuzo_imgs/ so images survive in-process and on-disk.
+# Fallback in-memory dict kept for backwards compat.
+_IMG_DIR = '/tmp/cuzo_imgs'
+os.makedirs(_IMG_DIR, exist_ok=True)
 _img_cache: dict[str, bytes] = {}
 
 def cache_img(job_id: str, data_bytes: bytes) -> str:
-    """Store image bytes and return a server-relative URL for it."""
+    """Persist image bytes to disk + memory and return a server-relative URL."""
     _img_cache[job_id] = data_bytes
+    try:
+        path = os.path.join(_IMG_DIR, f'{job_id}.png')
+        with open(path, 'wb') as f:
+            f.write(data_bytes)
+    except Exception as ex:
+        log.warning(f'cache_img disk write failed [{job_id}]: {ex}')
     return f'/api/img/{job_id}'
 
 @app.route('/api/img/<job_id>')
 def serve_cached_img(job_id):
+    # 1. Try in-memory cache (fastest)
     data = _img_cache.get(job_id)
-    if not data:
-        return 'Image not found (server restarted)', 404
-    return send_file(io.BytesIO(data), mimetype='image/png')
+    if data:
+        return send_file(io.BytesIO(data), mimetype='image/png')
+    # 2. Try disk (survives server restart within same Railway instance)
+    path = os.path.join(_IMG_DIR, f'{job_id}.png')
+    if os.path.exists(path):
+        return send_file(path, mimetype='image/png')
+    return jsonify(error='Image not found — server may have restarted'), 404
 
 # ── Socket.io emit helper ──────────────────────────────────────────────────────
 

@@ -1993,9 +1993,16 @@ function updateBadge() {
 }
 
 // ── ACTIONS ──
-function dlUrl(url, id) {
+async function dlUrl(url, id) {
   const fullUrl = url.startsWith('/') ? (location.origin + url) : url;
   const ext = /\.(mp4|webm|mov)(\?|$)/i.test(url) ? 'mp4' : url.startsWith('/api/img/') ? 'png' : 'jpg';
+  // For cached images, verify they still exist before triggering download
+  if (url.startsWith('/api/img/')) {
+    try {
+      const r = await fetch(fullUrl, {method:'HEAD'});
+      if (!r.ok) { alert('Image expired — please regenerate it. (Server restarted since this image was created.)'); return; }
+    } catch(e) { /* network error — try download anyway */ }
+  }
   const a=document.createElement('a'); a.href=fullUrl; a.download='cuzo_'+(id||Date.now())+'.'+ext; a.target='_blank';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
