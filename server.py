@@ -604,7 +604,7 @@ def gen_video_laozhang(job_id: str, prompt: str, model: str, duration: str,
     try:
         with eventlet.Timeout(60):
             r = requests.post(
-                'https://api.laozhang.ai/v1/videos/generations',
+                'https://api.laozhang.ai/v1/video/generations',
                 headers=headers, json=payload, timeout=60,
             )
         r.raise_for_status()
@@ -643,7 +643,7 @@ def gen_video_laozhang(job_id: str, prompt: str, model: str, duration: str,
             poll_num += 1
             try:
                 pr = requests.get(
-                    f'https://api.laozhang.ai/v1/videos/generations/{task_id}',
+                    f'https://api.laozhang.ai/v1/video/generations/{task_id}',
                     headers=headers, timeout=30,
                 )
                 pr.raise_for_status()
