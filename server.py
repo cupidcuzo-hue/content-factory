@@ -358,9 +358,9 @@ def gen_image(job_id: str, prompt: str, resolution: str, ratio: str,
         except Exception:
             pass
         log.warning(f"Laozhang image failed [{job_id}], falling back to KIE: {e} | {body[:100]}")
-        # Auto-fallback to KIE when Laozhang is down / no channels
+        # Auto-fallback to KIE when Laozhang is down / no channels — pass ref photos through
         emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Laozhang unavailable — retrying via KIE…', 'pct': 20})
-        gen_image_kie(job_id, prompt, ratio, model_name, socket_id, model='nano-banana-pro')
+        gen_image_kie(job_id, prompt, ratio, model_name, socket_id, model='nano-banana-pro', ref_urls=ref_urls or [])
         return
 
     total_cost = log_cost(job_id, 'laozhang', model, 'image', model_name, cost_per)
@@ -429,12 +429,13 @@ def gen_image_batch(job_ids: list, prompt: str, resolution: str, ratio: str,
         except Exception:
             pass
         log.warning(f"Laozhang batch failed, falling back to KIE per-image: {e} | {body[:100]}")
-        # Auto-fallback: fire one KIE job per image
+        # Auto-fallback: fire one KIE job per image, pass ref photos through
         for jid in job_ids:
             emit_to(socket_id, 'job:progress', {'job_id': jid, 'status': 'Laozhang unavailable — retrying via KIE…', 'pct': 20})
             threading.Thread(target=gen_image_kie, daemon=True, kwargs=dict(
                 job_id=jid, prompt=prompt, ratio=ratio,
                 model='nano-banana-pro', model_name=model_name, socket_id=socket_id,
+                ref_urls=ref_urls or [],
             )).start()
         return
 
@@ -780,10 +781,10 @@ def gen_video_laozhang(job_id: str, prompt: str, model: str, duration: str,
 # Models that need extra fields in their input (beyond just prompt + aspect_ratio)
 _KIE_NB_MODELS = {'nano-banana-pro', 'nano-banana-2', 'google/nano-banana'}
 
-def _kie_image_input(model: str, prompt: str, ratio: str) -> dict:
+def _kie_image_input(model: str, prompt: str, ratio: str, ref_urls: list | None = None) -> dict:
     """Build correct KIE input payload for each image model."""
     if model in _KIE_NB_MODELS:
-        return {'prompt': prompt, 'image_input': [], 'aspect_ratio': ratio,
+        return {'prompt': prompt, 'image_input': ref_urls or [], 'aspect_ratio': ratio,
                 'resolution': '2K', 'output_format': 'png'}
     if model == 'grok-imagine/text-to-image':
         # Grok only supports: 2:3, 3:2, 1:1, 16:9, 9:16
@@ -805,11 +806,11 @@ def _kie_extract_image_url(result: dict) -> str | None:
 
 
 def gen_image_kie(job_id: str, prompt: str, ratio: str, model_name: str,
-                  socket_id: str, model: str = 'nano-banana-pro'):
+                  socket_id: str, model: str = 'nano-banana-pro', ref_urls: list | None = None):
     """Generate image via KIE.ai, emit result on completion."""
     cost_per = KIE_IMAGE_COSTS.get(model, 0.040)
     headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
-    inp = _kie_image_input(model, prompt, ratio)
+    inp = _kie_image_input(model, prompt, ratio, ref_urls)
 
     emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Submitting to KIE…', 'pct': 5})
     log.info(f"KIE image submit [{job_id}] model={model} input={json.dumps(inp)[:200]}")
@@ -866,7 +867,8 @@ def gen_image_kie(job_id: str, prompt: str, ratio: str, model_name: str,
                 log.info(f"KIE image complete [{job_id}] cost=${total_cost:.4f} url={img_url[:60]}")
                 return
             elif state in ('fail', 'failed', 'error'):
-                err = raw.get('failReason') or raw.get('error') or 'KIE generation failed'
+                err = raw.get('failReason') or raw.get('failMsg') or raw.get('error') or 'KIE generation failed'
+                log.error(f"KIE image fail [{job_id}] reason={err} raw={json.dumps(raw)[:300]}")
                 emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'KIE failed: {err}'})
                 return
         except Exception as e:
@@ -913,9 +915,10 @@ def api_gen_image_batch():
                 job_id=job_id,
                 prompt=d['prompt'],
                 ratio=d.get('ratio', '9:16'),
-                model=d.get('model', 'kolors'),
+                model=d.get('model', 'nano-banana-pro'),
                 model_name=d.get('model_name', 'unknown'),
                 socket_id=d.get('socket_id', ''),
+                ref_urls=d.get('ref_urls', []),
             )).start()
     else:
         # Laozhang: one API call with n=count
