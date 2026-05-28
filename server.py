@@ -105,6 +105,12 @@ LAOZHANG_COSTS = {'1K': 0.0125, '2K': 0.025, '4K': 0.050}
 # Per-model cost overrides for Laozhang (for models that aren't resolution-priced)
 LAOZHANG_MODEL_COSTS = {
     'gpt-image-1':             0.040,
+    'gpt-image-2':             0.040,
+    'gpt-image-2-all':         0.040,
+    'gpt-image-2-vip':         0.060,
+    'gemini-2.5-flash-image':  0.020,
+    'gemini-3-pro-image-preview': 0.060,
+    'gemini-3.1-flash-image-preview': 0.025,
     'dall-e-3':                0.080,
     'grok-2-aurora':           0.070,
     'imagen-3.0-generate-002': 0.050,
@@ -177,9 +183,18 @@ GPTI1_SIZE_MAP = {
     '4:3': '1536x1024', '16:9': '1536x1024',
 }
 
+# gpt-image-2 / gemini require sizes that are multiples of 16
+GPTI2_SIZE_MAP = {
+    '9:16': '1024x1792', '3:4': '1024x1344', '1:1': '1024x1024',
+    '4:3': '1344x1024', '16:9': '1792x1024',
+}
+
 # Models that need special parameter handling
 DALLE3_MODELS   = {'dall-e-3'}
 GPTI1_MODELS    = {'gpt-image-1'}
+GPTI2_MODELS    = {'gpt-image-2', 'gpt-image-2-all', 'gpt-image-2-vip',
+                   'gemini-2.5-flash-image', 'gemini-3-pro-image-preview',
+                   'gemini-3.1-flash-image-preview'}
 
 def _lz_payload(model: str, prompt: str, ratio: str, resolution: str, ref_urls: list, n: int = 1) -> dict:
     """Build correct Laozhang payload for any model — handles size/quality differences."""
@@ -189,10 +204,13 @@ def _lz_payload(model: str, prompt: str, ratio: str, resolution: str, ref_urls: 
     elif model in GPTI1_MODELS:
         size = GPTI1_SIZE_MAP.get(ratio, '1024x1536')
         p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'high'}
+    elif model in GPTI2_MODELS:
+        size = GPTI2_SIZE_MAP.get(ratio, '1024x1792')
+        p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'standard'}
     else:
         size = IMG_SIZE_MAP.get((ratio, resolution), '1024x1820')
         p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'hd'}
-    if ref_urls and model not in DALLE3_MODELS and model not in GPTI1_MODELS:
+    if ref_urls and model not in DALLE3_MODELS and model not in GPTI1_MODELS and model not in GPTI2_MODELS:
         p['image_input'] = ref_urls
     return p
 

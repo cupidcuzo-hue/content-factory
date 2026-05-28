@@ -399,6 +399,12 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
                 <option value="gpt-image-2-text-to-image">GPT Image 2</option>
               </optgroup>
               <optgroup label="── Laozhang ──">
+                <option value="gpt-image-2">GPT Image 2 ⚡</option>
+                <option value="gpt-image-2-all">GPT Image 2 All</option>
+                <option value="gpt-image-2-vip">GPT Image 2 VIP</option>
+                <option value="gemini-2.5-flash-image">Gemini 2.5 Flash</option>
+                <option value="gemini-3.1-flash-image-preview">Gemini 3.1 Flash</option>
+                <option value="gemini-3-pro-image-preview">Gemini 3 Pro</option>
                 <option value="gpt-image-1">GPT-Image-1</option>
                 <option value="seedream/4.5-edit">Seedream 4.5 Edit ✦ refs</option>
                 <option value="seedream/4.5-text-to-image">Seedream 4.5 Text</option>
@@ -407,7 +413,6 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
                 <option value="flux-1.1-pro">Flux 1.1 Pro</option>
                 <option value="flux-1-dev">Flux Dev</option>
                 <option value="flux-1-schnell">Flux Schnell ⚡</option>
-                <option value="nano-banana-pro-lz">NanoBanana Pro</option>
                 <option value="grok-2-aurora">Grok Aurora</option>
                 <option value="imagen-3.0-generate-002">Gemini Imagen 3</option>
               </optgroup>
@@ -899,7 +904,13 @@ const COSTS = {
   'flux-1.1-pro':                        0.050,
   'flux-1-dev':                          0.030,
   'flux-1-schnell':                      0.010,
-  // ── OpenAI via Laozhang ──
+  // ── OpenAI/Gemini via Laozhang (CONFIRMED WORKING) ──
+  'gpt-image-2':                         0.040,
+  'gpt-image-2-all':                     0.040,
+  'gpt-image-2-vip':                     0.060,
+  'gemini-2.5-flash-image':              0.020,
+  'gemini-3.1-flash-image-preview':      0.025,
+  'gemini-3-pro-image-preview':          0.060,
   'gpt-image-1':                         0.040,
   'dall-e-3':                            0.080,
   // ── KIE image ──
@@ -936,7 +947,7 @@ let imageProvider = 'kie'; // 'laozhang' | 'kie' — KIE default (Laozhang needs
 let videoProvider = 'kie';      // 'laozhang' | 'kie' — KIE is default for video
 
 const KIE_IMAGE_MODELS = new Set(['nano-banana-pro','nano-banana-2','google/nano-banana','grok-imagine/text-to-image','google/imagen4','google/imagen4-ultra','gpt-image-2-text-to-image']);
-const LZ_IMAGE_MODELS  = new Set(['gpt-image-1','seedream/4.5-edit','seedream/4.5-text-to-image','bytedance/seedream-v4-text-to-image','bytedance/seedream','nano-banana-pro-lz','grok-2-aurora','imagen-3.0-generate-002','flux-1.1-pro','flux-1-dev','flux-1-schnell']);
+const LZ_IMAGE_MODELS  = new Set(['gpt-image-2','gpt-image-2-all','gpt-image-2-vip','gemini-2.5-flash-image','gemini-3.1-flash-image-preview','gemini-3-pro-image-preview','gpt-image-1','seedream/4.5-edit','seedream/4.5-text-to-image','bytedance/seedream-v4-text-to-image','bytedance/seedream','grok-2-aurora','imagen-3.0-generate-002','flux-1.1-pro','flux-1-dev','flux-1-schnell']);
 
 function setImageProvider(p) {
   imageProvider = p;
@@ -949,7 +960,7 @@ function setImageProvider(p) {
   if (sel) {
     const cur = sel.value;
     if (p === 'kie' && LZ_IMAGE_MODELS.has(cur)) sel.value = 'nano-banana-pro';
-    if (p === 'laozhang' && KIE_IMAGE_MODELS.has(cur)) sel.value = 'gpt-image-1';
+    if (p === 'laozhang' && KIE_IMAGE_MODELS.has(cur)) sel.value = 'gpt-image-2';
   }
   _updateRefNote();
   updateCostPreviews();
