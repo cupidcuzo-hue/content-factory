@@ -1950,9 +1950,9 @@ function addPend(cid, mid, type, prompt, label, ratio) {
   const t=getTarget(mid); t.insertBefore(card,t.firstChild);
   card.scrollIntoView({behavior:'smooth',block:'nearest'});
   updateBadge();
-  // Auto-cancel if API never responds — images 90s, videos 5 min
-  const limitMs = type==='video' ? 5*60*1000 : 90*1000;
-  const limitLabel = type==='video' ? '5 min' : '90s';
+  // Auto-cancel if API never responds — images 3 min, videos 5 min
+  const limitMs = type==='video' ? 5*60*1000 : 3*60*1000;
+  const limitLabel = type==='video' ? '5 min' : '3 min';
   setTimeout(() => {
     if (pendingJobs.has(cid)) {
       pendingJobs.delete(cid);
