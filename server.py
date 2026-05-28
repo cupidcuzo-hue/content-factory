@@ -1100,30 +1100,36 @@ def api_debug_kie_video():
     mode     = request.args.get('mode', 'std')
     key_hint = (KIE_API_KEY[:8] + '…') if KIE_API_KEY else 'NOT SET'
     headers  = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
-    # Try multiple payload variants to find which fields KIE actually requires
-    base = {
-        'prompt': 'beautiful woman walking on beach, cinematic',
-        'negative_prompt': '',
-        'aspect_ratio': ratio,
-        'duration': duration,
-        'mode': mode,
+    prompt_val = 'beautiful woman walking on beach, cinematic'
+    base_no_mode = {
+        'prompt': prompt_val, 'negative_prompt': '',
+        'aspect_ratio': ratio, 'duration': duration,
     }
+    base_std  = {**base_no_mode, 'mode': 'std'}
+    base_pro  = {**base_no_mode, 'mode': 'pro'}
+    img_url   = 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=512'
     variants = [
-        ('base', {**base}),
-        ('+ multi_shots:false', {**base, 'multi_shots': False}),
-        ('+ multi_shots:[]',    {**base, 'multi_shots': []}),
-        ('+ cfg_scale:0.5',     {**base, 'cfg_scale': 0.5}),
-        ('+ multi_shots:false + cfg_scale:0.5', {**base, 'multi_shots': False, 'cfg_scale': 0.5}),
+        ('no-mode',                  base_no_mode),
+        ('mode=std',                 base_std),
+        ('mode=pro',                 base_pro),
+        ('mode=std + image_url',     {**base_std, 'image_url': img_url}),
+        ('no-mode + image_url',      {**base_no_mode, 'image_url': img_url}),
+        ('mode=std + duration=str',  {**base_no_mode, 'mode': 'std', 'duration': str(duration)}),
+        ('mode=std + cfg_scale',     {**base_std, 'cfg_scale': 0.5}),
+        ('minimal: prompt+ar+dur',   {'prompt': prompt_val, 'aspect_ratio': ratio, 'duration': duration}),
+        ('minimal + mode',           {'prompt': prompt_val, 'aspect_ratio': ratio, 'duration': duration, 'mode': 'std'}),
     ]
     results = {}
     for label, inp in variants:
         try:
             r = requests.post(f'{KIE_BASE}/createTask', headers=headers,
                               json={'model': model, 'input': inp}, timeout=30)
-            resp = r.json() if r.headers.get('content-type','').startswith('application/json') else r.text[:200]
-            results[label] = {'code': resp.get('code') if isinstance(resp,dict) else r.status_code,
-                               'msg': resp.get('msg') if isinstance(resp,dict) else resp,
-                               'task_id': (resp.get('data') or {}).get('taskId')}
+            resp = r.json() if 'application/json' in r.headers.get('content-type','') else r.text[:200]
+            results[label] = {
+                'code': resp.get('code') if isinstance(resp, dict) else r.status_code,
+                'msg':  resp.get('msg')  if isinstance(resp, dict) else resp,
+                'task_id': (resp.get('data') or {}).get('taskId'),
+            }
         except Exception as e:
             results[label] = {'error': str(e)}
     return jsonify({'key_hint': key_hint, 'model': model, 'ratio': ratio,
