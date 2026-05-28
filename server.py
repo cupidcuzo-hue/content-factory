@@ -1242,6 +1242,33 @@ def api_debug_kie_video_poll():
     return jsonify({'key_hint': key_hint, 'model': model, 'task_id': task_id, 'polls': polls})
 
 
+@app.route('/api/debug/kie-task-status')
+def api_debug_kie_task_status():
+    """Single poll of a KIE task — instant. Usage: ?task_id=<id>"""
+    task_id = request.args.get('task_id', '')
+    if not task_id:
+        return jsonify({'error': 'task_id required'}), 400
+    headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
+    try:
+        pr = requests.get(f'{KIE_BASE}/recordInfo?taskId={task_id}', headers=headers, timeout=15)
+        raw = pr.json().get('data', {})
+        rj = raw.get('resultJson')
+        parsed_rj = None
+        if isinstance(rj, str) and rj.strip():
+            try: parsed_rj = json.loads(rj)
+            except: parsed_rj = rj[:500]
+        return jsonify({
+            'task_id': task_id,
+            'state': raw.get('state'),
+            'failCode': raw.get('failCode'),
+            'failMsg': raw.get('failMsg'),
+            'resultJson': parsed_rj,
+            'data_keys': list(raw.keys()),
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 502
+
+
 @app.route('/api/test/all')
 def api_test_all():
     results = {}
