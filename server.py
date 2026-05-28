@@ -564,9 +564,8 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
         if mc_orientation and 'kling-3.0' not in kie_model:
             payload_input['character_orientation'] = mc_orientation
     else:
-        # KIE Kling only accepts duration "5" or "10" — clamp anything else
-        _dur = int(duration or 5)
-        dur_str = '10' if _dur > 5 else '5'
+        # KIE expects duration as a string — pass exactly what user selected
+        dur_str = str(int(duration or 5))
 
         # ── kling-2.6 text-to-video ──────────────────────────────────────────
         # Docs: {prompt, sound, aspect_ratio, duration}  — NO mode, NO negative_prompt
