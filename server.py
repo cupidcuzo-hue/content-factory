@@ -134,13 +134,14 @@ KIE_IMAGE_COSTS = {
 }
 
 VIDEO_COSTS = {
-    'kling/v2-1-standard':      0.125,
-    'kling/v2-1-pro':           0.250,
-    'kling/v2-1-master':        0.800,
-    'kling-3.0/video':          0.350,
-    'kling-2.6/text-to-video':  0.250,
-    'kling-3.0/motion-control': 0.500,
-    'kling-2.6/motion-control': 0.350,
+    'kling/v2-1-standard':               0.125,
+    'kling/v2-1-pro':                    0.250,
+    'kling/v2-1-master':                 0.800,
+    'kling/v2-1-master-text-to-video':   0.800,
+    'kling-3.0/video':                   0.350,
+    'kling-2.6/text-to-video':           0.250,
+    'kling-3.0/motion-control':          0.500,
+    'kling-2.6/motion-control':          0.350,
 }
 
 LAOZHANG_VIDEO_COSTS = {
@@ -544,19 +545,56 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
         if mc_orientation and 'kling-3.0' not in kie_model:
             payload_input['character_orientation'] = mc_orientation
     else:
-        is_kling3 = 'kling-3.0' in kie_model or 'kling/v2-1' in kie_model
-        safe_dur = duration if is_kling3 else ('5' if int(duration or 5) <= 5 else '10')
+        # KIE always wants duration as a STRING, never int
+        dur_str = str(int(duration or 5))
 
-        payload_input = {
-            'prompt': prompt,
-            'negative_prompt': '',   # required by KIE even when empty
-            'aspect_ratio': ratio,
-            'duration': int(safe_dur),  # KIE expects integer, not string
-        }
-        if mode and is_kling3:
-            payload_input['mode'] = mode
-        if image_url:
-            payload_input['image_url'] = image_url
+        # ── kling-2.6 text-to-video ──────────────────────────────────────────
+        # Docs: {prompt, sound, aspect_ratio, duration}  — NO mode, NO negative_prompt
+        if kie_model in ('kling-2.6/text-to-video', 'kling-3.0/video'):
+            payload_input = {
+                'prompt': prompt,
+                'sound': False,
+                'aspect_ratio': ratio,
+                'duration': dur_str,
+            }
+            if image_url:  # optional start frame
+                payload_input['image_url'] = image_url
+
+        # ── kling v2.1 master text-to-video ──────────────────────────────────
+        # Docs: {prompt, duration, aspect_ratio, negative_prompt, cfg_scale}  — NO mode
+        elif kie_model == 'kling/v2-1-master-text-to-video':
+            payload_input = {
+                'prompt': prompt,
+                'duration': dur_str,
+                'aspect_ratio': ratio,
+                'negative_prompt': 'blur, distort, and low quality',
+                'cfg_scale': 0.5,
+            }
+            if image_url:
+                payload_input['image_url'] = image_url
+
+        # ── kling v2.1 i2v: standard / pro / master ──────────────────────────
+        # These require image_url.  If none provided → fall back to kling-2.6 t2v
+        else:
+            if not image_url:
+                log.warning(f"[{job_id}] {kie_model} is image-to-video but no start frame supplied "
+                            f"— falling back to kling-2.6/text-to-video")
+                kie_model = 'kling-2.6/text-to-video'
+                payload_input = {
+                    'prompt': prompt,
+                    'sound': False,
+                    'aspect_ratio': ratio,
+                    'duration': dur_str,
+                }
+            else:
+                payload_input = {
+                    'prompt': prompt,
+                    'negative_prompt': '',
+                    'aspect_ratio': ratio,
+                    'duration': dur_str,
+                    'mode': mode or 'std',
+                    'image_url': image_url,
+                }
 
     headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
 
@@ -1090,51 +1128,50 @@ def api_debug_kie_image():
 
 @app.route('/api/debug/kie-video')
 def api_debug_kie_video():
-    """Dry-run KIE video createTask — shows EXACTLY what we send and what KIE replies.
-    Does NOT poll to completion (video takes too long). Just verifies the submit succeeds.
-    Usage: /api/debug/kie-video?model=kling/v2-1-standard&duration=5&ratio=9:16
+    """Dry-run KIE video createTask for any model — shows payload sent and KIE reply.
+    Does NOT poll to completion. Just confirms the submit is accepted.
+    Usage: /api/debug/kie-video?model=kling-2.6/text-to-video&duration=5&ratio=9:16
+    Optional: &image_url=https://... to test i2v models
     """
-    model    = request.args.get('model', 'kling/v2-1-standard')
-    duration = int(request.args.get('duration', '5'))
-    ratio    = request.args.get('ratio', '9:16')
-    mode     = request.args.get('mode', 'std')
-    key_hint = (KIE_API_KEY[:8] + '…') if KIE_API_KEY else 'NOT SET'
-    headers  = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
-    prompt_val = 'beautiful woman walking on beach, cinematic'
-    img_url    = 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=512'
+    model     = request.args.get('model', 'kling-2.6/text-to-video')
+    duration  = request.args.get('duration', '5')
+    ratio     = request.args.get('ratio', '9:16')
+    mode      = request.args.get('mode', 'std')
+    image_url = request.args.get('image_url', '')
+    key_hint  = (KIE_API_KEY[:8] + '…') if KIE_API_KEY else 'NOT SET'
+    headers   = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
+    prompt    = 'beautiful woman walking on beach, cinematic'
+    dur_str   = str(int(duration))
 
-    # KNOWN: kling/v2-1-standard/pro work as i2v with image_url + duration as string.
-    # NOW: nail down kling-2.6/text-to-video — what field is it missing?
-    # Also probe kling/v2-1-master with image_url
+    # Build payload using the same logic as gen_video()
+    if model in ('kling-2.6/text-to-video', 'kling-3.0/video'):
+        inp = {'prompt': prompt, 'sound': False, 'aspect_ratio': ratio, 'duration': dur_str}
+        if image_url:
+            inp['image_url'] = image_url
+    elif model == 'kling/v2-1-master-text-to-video':
+        inp = {'prompt': prompt, 'duration': dur_str, 'aspect_ratio': ratio,
+               'negative_prompt': 'blur, distort, and low quality', 'cfg_scale': 0.5}
+        if image_url:
+            inp['image_url'] = image_url
+    else:  # i2v models
+        inp = {'prompt': prompt, 'negative_prompt': '', 'aspect_ratio': ratio,
+               'duration': dur_str, 'mode': mode}
+        if image_url:
+            inp['image_url'] = image_url
 
-    results = {}
-    def try_payload(label, m, inp):
-        try:
-            r = requests.post(f'{KIE_BASE}/createTask', headers=headers,
-                              json={'model': m, 'input': inp}, timeout=20)
-            resp = r.json()
-            results[label] = {'code': resp.get('code'), 'msg': resp.get('msg'),
-                               'task_id': (resp.get('data') or {}).get('taskId')}
-        except Exception as e:
-            results[label] = {'error': str(e)}
-
-    base = {'prompt': prompt_val, 'negative_prompt': '', 'aspect_ratio': ratio, 'duration': str(duration)}
-
-    # kling-2.6/text-to-video variants
-    try_payload('2.6 t2v: base+mode',           'kling-2.6/text-to-video', {**base, 'mode': mode})
-    try_payload('2.6 t2v: no-mode',             'kling-2.6/text-to-video', base)
-    try_payload('2.6 t2v: +image_url',          'kling-2.6/text-to-video', {**base, 'mode': mode, 'image_url': img_url})
-    try_payload('2.6 t2v: image_url=null',      'kling-2.6/text-to-video', {**base, 'mode': mode, 'image_url': None})
-    try_payload('2.6 t2v: image_url=""',        'kling-2.6/text-to-video', {**base, 'mode': mode, 'image_url': ''})
-    try_payload('2.6 t2v: no neg_prompt',       'kling-2.6/text-to-video', {'prompt': prompt_val, 'aspect_ratio': ratio, 'duration': str(duration), 'mode': mode})
-    try_payload('2.6 t2v: mode=pro',            'kling-2.6/text-to-video', {**base, 'mode': 'pro'})
-    try_payload('2.6 t2v: cfg_scale',           'kling-2.6/text-to-video', {**base, 'mode': mode, 'cfg_scale': 0.5})
-    try_payload('2.6 t2v: duration=int',        'kling-2.6/text-to-video', {**base, 'mode': mode, 'duration': int(duration)})
-    # kling/v2-1-master with image_url
-    try_payload('v2-1-master i2v',              'kling/v2-1-master', {**base, 'mode': mode, 'image_url': img_url})
-
-    return jsonify({'key_hint': key_hint, 'summary': 'kling-2.6/text-to-video field probe',
-                    'results': results})
+    try:
+        r = requests.post(f'{KIE_BASE}/createTask', headers=headers,
+                          json={'model': model, 'input': inp}, timeout=20)
+        resp = r.json()
+        return jsonify({
+            'key_hint': key_hint, 'model': model,
+            'payload_sent': inp,
+            'kie_code': resp.get('code'), 'kie_msg': resp.get('msg'),
+            'task_id': (resp.get('data') or {}).get('taskId'),
+            'full_response': resp,
+        })
+    except Exception as e:
+        return jsonify({'key_hint': key_hint, 'model': model, 'error': str(e)}), 502
 
 
 @app.route('/api/test/all')
