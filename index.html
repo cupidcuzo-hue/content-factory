@@ -1995,11 +1995,15 @@ function updateBadge() {
 
 // ── ACTIONS ──
 function dlUrl(url, id) {
-  const ext = /\.(mp4|webm|mov)(\?|$)/i.test(url) ? 'mp4' : 'jpg';
-  const a=document.createElement('a'); a.href=url; a.download='cuzo_'+(id||Date.now())+'.'+ext; a.target='_blank';
+  const fullUrl = url.startsWith('/') ? (location.origin + url) : url;
+  const ext = /\.(mp4|webm|mov)(\?|$)/i.test(url) ? 'mp4' : url.startsWith('/api/img/') ? 'png' : 'jpg';
+  const a=document.createElement('a'); a.href=fullUrl; a.download='cuzo_'+(id||Date.now())+'.'+ext; a.target='_blank';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
-function cpUrl(url) { navigator.clipboard.writeText(url).catch(()=>alert('URL: '+url)); }
+function cpUrl(url) {
+  const fullUrl = url.startsWith('/') ? (location.origin + url) : url;
+  navigator.clipboard.writeText(fullUrl).catch(()=>alert('URL: '+fullUrl));
+}
 function dlAll() {
   const ok=items.filter(x=>x.status==='success');
   if(!ok.length){alert('No completed items.');return;}
