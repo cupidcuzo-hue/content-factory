@@ -1103,43 +1103,38 @@ def api_debug_kie_video():
     prompt_val = 'beautiful woman walking on beach, cinematic'
     img_url    = 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=512'
 
-    # KNOWN: kling/v2-1-* require image_url (i2v only), duration must be STRING.
-    # NOW: find which models support text-to-video (no image_url)
-    # and fix kling-2.6/text-to-video which also errors
+    # KNOWN: kling/v2-1-standard/pro work as i2v with image_url + duration as string.
+    # NOW: nail down kling-2.6/text-to-video — what field is it missing?
+    # Also probe kling/v2-1-master with image_url
 
-    t2v_base = {'prompt': prompt_val, 'negative_prompt': '', 'aspect_ratio': ratio,
-                'duration': str(duration), 'mode': mode}
     results = {}
-
-    # Probe all likely t2v model names
-    t2v_candidates = [
-        'kling-2.6/text-to-video',
-        'kling-2.6',
-        'kling-2.6/t2v',
-        'kling/v2-1-master',
-        'kling/v2-1-standard/i2v',
-        'kling/t2v-standard',
-        'kling/t2v-pro',
-        'kling-v2-1/t2v',
-        'kling-v2.1-standard',
-        'kolors',
-        'kling-v1-6-standard',
-        'kling-v1-6-pro',
-        'kling-v1-5-standard',
-        'kling-v1-5-pro',
-    ]
-    for m in t2v_candidates:
+    def try_payload(label, m, inp):
         try:
             r = requests.post(f'{KIE_BASE}/createTask', headers=headers,
-                              json={'model': m, 'input': t2v_base}, timeout=20)
+                              json={'model': m, 'input': inp}, timeout=20)
             resp = r.json()
-            results[m] = {'code': resp.get('code'), 'msg': resp.get('msg'),
-                          'task_id': (resp.get('data') or {}).get('taskId')}
+            results[label] = {'code': resp.get('code'), 'msg': resp.get('msg'),
+                               'task_id': (resp.get('data') or {}).get('taskId')}
         except Exception as e:
-            results[m] = {'error': str(e)}
+            results[label] = {'error': str(e)}
 
-    return jsonify({'key_hint': key_hint, 'summary': 'probing t2v model names',
-                    'payload_used': t2v_base, 'results': results})
+    base = {'prompt': prompt_val, 'negative_prompt': '', 'aspect_ratio': ratio, 'duration': str(duration)}
+
+    # kling-2.6/text-to-video variants
+    try_payload('2.6 t2v: base+mode',           'kling-2.6/text-to-video', {**base, 'mode': mode})
+    try_payload('2.6 t2v: no-mode',             'kling-2.6/text-to-video', base)
+    try_payload('2.6 t2v: +image_url',          'kling-2.6/text-to-video', {**base, 'mode': mode, 'image_url': img_url})
+    try_payload('2.6 t2v: image_url=null',      'kling-2.6/text-to-video', {**base, 'mode': mode, 'image_url': None})
+    try_payload('2.6 t2v: image_url=""',        'kling-2.6/text-to-video', {**base, 'mode': mode, 'image_url': ''})
+    try_payload('2.6 t2v: no neg_prompt',       'kling-2.6/text-to-video', {'prompt': prompt_val, 'aspect_ratio': ratio, 'duration': str(duration), 'mode': mode})
+    try_payload('2.6 t2v: mode=pro',            'kling-2.6/text-to-video', {**base, 'mode': 'pro'})
+    try_payload('2.6 t2v: cfg_scale',           'kling-2.6/text-to-video', {**base, 'mode': mode, 'cfg_scale': 0.5})
+    try_payload('2.6 t2v: duration=int',        'kling-2.6/text-to-video', {**base, 'mode': mode, 'duration': int(duration)})
+    # kling/v2-1-master with image_url
+    try_payload('v2-1-master i2v',              'kling/v2-1-master', {**base, 'mode': mode, 'image_url': img_url})
+
+    return jsonify({'key_hint': key_hint, 'summary': 'kling-2.6/text-to-video field probe',
+                    'results': results})
 
 
 @app.route('/api/test/all')
