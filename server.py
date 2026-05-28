@@ -1103,46 +1103,43 @@ def api_debug_kie_video():
     prompt_val = 'beautiful woman walking on beach, cinematic'
     img_url    = 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=512'
 
-    # We now know: kling/v2-1-standard REQUIRES image_url, and duration must be STRING.
-    # Goal: (a) confirm i2v works with correct fields, (b) find t2v model string for v2.1
+    # KNOWN: kling/v2-1-* require image_url (i2v only), duration must be STRING.
+    # NOW: find which models support text-to-video (no image_url)
+    # and fix kling-2.6/text-to-video which also errors
 
-    i2v_base = {'prompt': prompt_val, 'negative_prompt': '', 'aspect_ratio': ratio,
-                'duration': str(duration), 'mode': mode, 'image_url': img_url}
-    t2v_models = ['kling/v2-1', 'kling/v2-1-standard', 'kling/v2-1/t2v',
-                  'kling/v2-1/text-to-video', 'kling-2.6/text-to-video']
-    t2v_base   = {'prompt': prompt_val, 'negative_prompt': '', 'aspect_ratio': ratio,
-                  'duration': str(duration), 'mode': mode}
+    t2v_base = {'prompt': prompt_val, 'negative_prompt': '', 'aspect_ratio': ratio,
+                'duration': str(duration), 'mode': mode}
+    results = {}
 
-    results = {'i2v_correct_fields': {}, 't2v_model_probe': {}}
-
-    # Test confirmed i2v path first
-    for m in ['kling/v2-1-standard', 'kling/v2-1-pro']:
+    # Probe all likely t2v model names
+    t2v_candidates = [
+        'kling-2.6/text-to-video',
+        'kling-2.6',
+        'kling-2.6/t2v',
+        'kling/v2-1-master',
+        'kling/v2-1-standard/i2v',
+        'kling/t2v-standard',
+        'kling/t2v-pro',
+        'kling-v2-1/t2v',
+        'kling-v2.1-standard',
+        'kolors',
+        'kling-v1-6-standard',
+        'kling-v1-6-pro',
+        'kling-v1-5-standard',
+        'kling-v1-5-pro',
+    ]
+    for m in t2v_candidates:
         try:
             r = requests.post(f'{KIE_BASE}/createTask', headers=headers,
-                              json={'model': m, 'input': i2v_base}, timeout=30)
+                              json={'model': m, 'input': t2v_base}, timeout=20)
             resp = r.json()
-            results['i2v_correct_fields'][m] = {
-                'code': resp.get('code'), 'msg': resp.get('msg'),
-                'task_id': (resp.get('data') or {}).get('taskId')
-            }
+            results[m] = {'code': resp.get('code'), 'msg': resp.get('msg'),
+                          'task_id': (resp.get('data') or {}).get('taskId')}
         except Exception as e:
-            results['i2v_correct_fields'][m] = {'error': str(e)}
+            results[m] = {'error': str(e)}
 
-    # Probe for t2v model strings
-    for m in t2v_models:
-        try:
-            r = requests.post(f'{KIE_BASE}/createTask', headers=headers,
-                              json={'model': m, 'input': t2v_base}, timeout=30)
-            resp = r.json()
-            results['t2v_model_probe'][m] = {
-                'code': resp.get('code'), 'msg': resp.get('msg'),
-                'task_id': (resp.get('data') or {}).get('taskId')
-            }
-        except Exception as e:
-            results['t2v_model_probe'][m] = {'error': str(e)}
-
-    return jsonify({'key_hint': key_hint, 'model': model, 'ratio': ratio,
-                    'duration': duration, 'mode': mode, 'results': results})
+    return jsonify({'key_hint': key_hint, 'summary': 'probing t2v model names',
+                    'payload_used': t2v_base, 'results': results})
 
 
 @app.route('/api/test/all')
