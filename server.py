@@ -1100,24 +1100,34 @@ def api_debug_kie_video():
     mode     = request.args.get('mode', 'std')
     key_hint = (KIE_API_KEY[:8] + '…') if KIE_API_KEY else 'NOT SET'
     headers  = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
-    payload_input = {
+    # Try multiple payload variants to find which fields KIE actually requires
+    base = {
         'prompt': 'beautiful woman walking on beach, cinematic',
         'negative_prompt': '',
         'aspect_ratio': ratio,
         'duration': duration,
         'mode': mode,
     }
-    body = {'model': model, 'input': payload_input}
-    try:
-        r = requests.post(f'{KIE_BASE}/createTask', headers=headers, json=body, timeout=30)
+    variants = [
+        ('base', {**base}),
+        ('+ multi_shots:false', {**base, 'multi_shots': False}),
+        ('+ multi_shots:[]',    {**base, 'multi_shots': []}),
+        ('+ cfg_scale:0.5',     {**base, 'cfg_scale': 0.5}),
+        ('+ multi_shots:false + cfg_scale:0.5', {**base, 'multi_shots': False, 'cfg_scale': 0.5}),
+    ]
+    results = {}
+    for label, inp in variants:
         try:
-            resp = r.json()
-        except Exception:
-            resp = r.text[:500]
-        return jsonify({'key_hint': key_hint, 'model': model,
-                        'http': r.status_code, 'payload_sent': body, 'response': resp})
-    except Exception as e:
-        return jsonify({'key_hint': key_hint, 'model': model, 'error': str(e)}), 502
+            r = requests.post(f'{KIE_BASE}/createTask', headers=headers,
+                              json={'model': model, 'input': inp}, timeout=30)
+            resp = r.json() if r.headers.get('content-type','').startswith('application/json') else r.text[:200]
+            results[label] = {'code': resp.get('code') if isinstance(resp,dict) else r.status_code,
+                               'msg': resp.get('msg') if isinstance(resp,dict) else resp,
+                               'task_id': (resp.get('data') or {}).get('taskId')}
+        except Exception as e:
+            results[label] = {'error': str(e)}
+    return jsonify({'key_hint': key_hint, 'model': model, 'ratio': ratio,
+                    'duration': duration, 'mode': mode, 'results': results})
 
 
 @app.route('/api/test/all')
