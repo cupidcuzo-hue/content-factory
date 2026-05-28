@@ -322,11 +322,12 @@ def gen_image(job_id: str, prompt: str, resolution: str, ratio: str,
         log.info(f"Laozhang image response [{job_id}]: {json.dumps(data)[:300]}")
         item = data['data'][0]
         img_url = item.get('url')
+        cached_bytes = None
         if not img_url and item.get('b64_json'):
             import base64
-            img_bytes = base64.b64decode(item['b64_json'])
-            img_url = cache_img(job_id, img_bytes)
-            log.info(f"gpt-image-1 b64 cached [{job_id}] → {img_url}")
+            cached_bytes = base64.b64decode(item['b64_json'])
+            img_url = cache_img(job_id, cached_bytes)
+            log.info(f"Laozhang b64 cached [{job_id}] → {img_url}")
         if not img_url:
             raise Exception(f"No URL or b64 in response: {json.dumps(data)[:200]}")
         log.info(f"Laozhang image ready [{job_id}]: {img_url[:60]}…")
@@ -352,12 +353,14 @@ def gen_image(job_id: str, prompt: str, resolution: str, ratio: str,
 
     if GOOGLE_SA_JSON and GOOGLE_DRIVE_FOLDER:
         date_str = datetime.date.today().strftime('%Y%m%d')
-        safe_name = model_name.replace(' ', '_').lower()
-        filename = f"{safe_name}_image_{date_str}_{job_id[:8]}.jpg"
-        def _bg_upload(url=img_url, fname=filename):
+        safe_name = model_name.replace(' ', '_').replace('/', '_').lower()
+        ext = 'png' if cached_bytes else 'jpg'
+        filename = f"{safe_name}_image_{date_str}_{job_id[:8]}.{ext}"
+        mime = 'image/png' if cached_bytes else 'image/jpeg'
+        def _bg_upload(url=img_url, fname=filename, data_bytes=cached_bytes, m=mime):
             try:
-                img_data = requests.get(url, timeout=60).content
-                upload_to_drive(img_data, fname, 'image/jpeg')
+                img_data = data_bytes if data_bytes else requests.get(url, timeout=60).content
+                upload_to_drive(img_data, fname, m)
             except Exception as ex:
                 log.warning(f"BG Drive upload failed [{job_id}]: {ex}")
         threading.Thread(target=_bg_upload, daemon=True).start()
