@@ -572,9 +572,9 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
           </div>
           <div class="row2">
             <div class="fg"><label class="fl">Aspect Ratio</label><select id="vi-r"><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option></select></div>
-            <div class="fg"><label class="fl">Duration</label><select id="vi-d"><option value="3">3s</option><option value="4">4s</option><option value="5" selected>5s</option><option value="6">6s</option><option value="7">7s</option><option value="8">8s</option><option value="9">9s</option><option value="10">10s</option><option value="11">11s</option><option value="12">12s</option><option value="13">13s</option><option value="14">14s</option><option value="15">15s</option></select></div>
+            <div class="fg"><label class="fl">Duration</label><select id="vi-d"><option value="5" selected>5s</option><option value="10">10s</option></select></div>
           </div>
-          <div class="fg"><label class="fl">Mode</label><select id="vi-mode"><option value="std">Standard (720p)</option><option value="pro">Pro (1080p)</option><option value="4K">4K</option></select></div>
+          <div class="fg" id="vi-mode-row"><label class="fl">Mode</label><select id="vi-mode"><option value="std">Standard (720p)</option><option value="pro">Pro (1080p)</option><option value="4K">4K</option></select></div>
           <div class="fg"><label class="fl">Count</label><select id="vi-c" style="max-width:120px"><option value="1" selected>1</option><option value="2">2</option><option value="3">3</option><option value="5">5</option></select></div>
           <div class="cost-prev" id="vi-cp"></div>
           <button class="gen-btn" id="vi-gen">Generate</button>
@@ -1017,6 +1017,14 @@ function _updateRefNote() {
   }
 }
 
+// I2V models that use start frame + mode field
+const KIE_I2V_MODELS = new Set(['kling/v2-1-standard','kling/v2-1-pro','kling/v2-1-master']);
+function updateKieModeRow() {
+  const m = $('vi-m') ? $('vi-m').value : '';
+  const showMode = KIE_I2V_MODELS.has(m) || m === '__c'; // show for i2v or custom
+  if ($('vi-mode-row')) $('vi-mode-row').style.display = (videoProvider === 'kie' && showMode) ? '' : 'none';
+}
+
 function setVideoProvider(p) {
   videoProvider = p;
   if($('vsrc-lz')) $('vsrc-lz').classList.toggle('active', p === 'laozhang');
@@ -1024,6 +1032,7 @@ function setVideoProvider(p) {
   // Laozhang model dropdown vs KIE model row
   $('lz-vid-opts').style.display  = p === 'laozhang' ? '' : 'none';
   if ($('vi-model-row')) $('vi-model-row').style.display = p === 'laozhang' ? 'none' : '';
+  updateKieModeRow();
   // Motion Control is KIE-only — hide that sub-tab when Laozhang selected
   if ($('vs-mc-tab')) $('vs-mc-tab').style.display = p === 'laozhang' ? 'none' : '';
   // If Motion Control was active and we switched to Laozhang, reset to Text to Video
@@ -1096,6 +1105,7 @@ function initApp() {
   // Auto-sync models from Cuzo Operation if credentials exist
   if (getCuzoJwt()) syncModelsFromCuzo(false);
   setImageProvider('kie'); // KIE default — Laozhang currently needs account top-up
+  setVideoProvider('kie'); // initialises mode row visibility
 }
 
 // ── MODEL BAR ──
@@ -1242,7 +1252,7 @@ function bindAll() {
     _updateRefNote();
     updateCostPreviews();
   });
-  $('vi-m').addEventListener('change', () => { $('vi-mc').style.display=$('vi-m').value==='__c'?'':'none'; updateCostPreviews(); });
+  $('vi-m').addEventListener('change', () => { $('vi-mc').style.display=$('vi-m').value==='__c'?'':'none'; updateCostPreviews(); updateKieModeRow(); });
   $('mc-m').addEventListener('change', () => { $('mc-mc').style.display=$('mc-m').value==='__c'?'':'none'; updateCostPreviews(); });
 
   // Cost preview triggers
