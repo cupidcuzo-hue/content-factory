@@ -1279,6 +1279,23 @@ def api_debug_kie_task_status():
         return jsonify({'error': str(e)}), 502
 
 
+@app.route('/api/debug/kie-raw', methods=['GET','POST'])
+def api_debug_kie_raw():
+    """Send any custom payload to KIE createTask. POST body: {model, input:{...}}"""
+    d = request.get_json(force=True) if request.method == 'POST' else {}
+    model = d.get('model', request.args.get('model', 'kling-3.0/video'))
+    inp   = d.get('input', {})
+    headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
+    try:
+        r = requests.post(f'{KIE_BASE}/createTask', headers=headers,
+                          json={'model': model, 'input': inp}, timeout=20)
+        resp = r.json()
+        return jsonify({'model': model, 'input_sent': inp, 'response': resp,
+                        'task_id': (resp.get('data') or {}).get('taskId')})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 502
+
+
 @app.route('/api/test/all')
 def api_test_all():
     results = {}
