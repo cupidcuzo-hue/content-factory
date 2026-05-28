@@ -114,10 +114,17 @@ LAOZHANG_MODEL_COSTS = {
 }
 
 KIE_IMAGE_COSTS = {
-    'kolors':                  0.030,
-    'kolors-virtual-try-on':   0.050,
-    'kling-image/v1-standard': 0.035,
-    'kling-image/v1-pro':      0.060,
+    # NanoBanana (Google Gemini-based) — confirmed working
+    'nano-banana-pro':              0.040,
+    'nano-banana-2':                0.040,
+    'google/nano-banana':           0.020,
+    # GPT Image via KIE
+    'gpt-image-2-text-to-image':    0.040,
+    # Grok Imagine via KIE
+    'grok-imagine/text-to-image':   0.060,
+    # Google Imagen 4 via KIE
+    'google/imagen4':               0.050,
+    'google/imagen4-ultra':         0.080,
 }
 
 VIDEO_COSTS = {
@@ -665,79 +672,102 @@ def gen_video_laozhang(job_id: str, prompt: str, model: str, duration: str,
 
 # ── Image generation via KIE.ai ──────────────────────────────────────────────
 
+# Models that need extra fields in their input (beyond just prompt + aspect_ratio)
+_KIE_NB_MODELS = {'nano-banana-pro', 'nano-banana-2', 'google/nano-banana'}
+
+def _kie_image_input(model: str, prompt: str, ratio: str) -> dict:
+    """Build correct KIE input payload for each image model."""
+    if model in _KIE_NB_MODELS:
+        return {'prompt': prompt, 'image_input': [], 'aspect_ratio': ratio,
+                'resolution': '2K', 'output_format': 'png'}
+    if model == 'grok-imagine/text-to-image':
+        # Grok only supports: 2:3, 3:2, 1:1, 16:9, 9:16
+        safe_ratio = ratio if ratio in ('1:1', '9:16', '16:9', '3:4', '4:3') else '1:1'
+        gr = {'9:16': '2:3', '16:9': '3:2', '3:4': '2:3', '4:3': '3:2', '1:1': '1:1'}.get(ratio, '1:1')
+        return {'prompt': prompt, 'aspect_ratio': gr, 'nsfw_checker': False, 'enable_pro': True}
+    if model in ('google/imagen4', 'google/imagen4-ultra'):
+        return {'prompt': prompt, 'aspect_ratio': ratio, 'negative_prompt': '', 'seed': ''}
+    # Default: simple prompt + aspect_ratio (works for gpt-image-2-text-to-image etc.)
+    return {'prompt': prompt, 'aspect_ratio': ratio}
+
+
+def _kie_extract_image_url(result: dict) -> str | None:
+    """Extract image URL from KIE result — handles multiple response shapes."""
+    return (result.get('imageUrls', [None])[0]
+            or result.get('resultUrls', [None])[0] if result.get('resultUrls') else None
+            or next((v['url'] for v in result.get('images', []) if v.get('url')), None)
+            or result.get('url'))
+
+
 def gen_image_kie(job_id: str, prompt: str, ratio: str, model_name: str,
-                  socket_id: str, model: str = 'kolors'):
-    """Generate image via KIE.ai (Kolors / Kling Image), emit result immediately."""
-    cost_per = KIE_IMAGE_COSTS.get(model, 0.030)
+                  socket_id: str, model: str = 'nano-banana-pro'):
+    """Generate image via KIE.ai, emit result on completion."""
+    cost_per = KIE_IMAGE_COSTS.get(model, 0.040)
     headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
+    inp = _kie_image_input(model, prompt, ratio)
 
     emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Submitting to KIE…', 'pct': 5})
+    log.info(f"KIE image submit [{job_id}] model={model} input={json.dumps(inp)[:200]}")
 
     try:
         with eventlet.Timeout(30):
             r = requests.post(
                 f'{KIE_BASE}/createTask',
                 headers=headers,
-                json={'model': model, 'input': {'prompt': prompt, 'aspect_ratio': ratio}},
+                json={'model': model, 'input': inp},
                 timeout=30,
             )
-        r.raise_for_status()
         d = r.json()
+        log.info(f"KIE image createTask [{job_id}]: {json.dumps(d)[:200]}")
         if d.get('code') != 200:
-            raise Exception(d.get('msg', 'KIE API error'))
+            raise Exception(f"KIE error {d.get('code')}: {d.get('msg', 'unknown')}")
         task_id = d['data']['taskId']
         log.info(f"KIE image task created [{job_id}]: {task_id}")
     except eventlet.Timeout:
         emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'KIE submit timed out — try again'})
         return
     except Exception as e:
-        body = ''
-        try:
-            if hasattr(e, 'response') and e.response is not None:
-                body = e.response.text[:300]
-        except Exception:
-            pass
-        log.error(f"KIE image submit failed [{job_id}]: {e} | body={body}")
-        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'KIE error: {body or str(e)}'})
+        log.error(f"KIE image submit failed [{job_id}]: {e}")
+        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'KIE submit failed: {e}'})
         return
 
-    deadline = time.time() + 180
+    deadline = time.time() + 300  # 5 min max
     poll_num = 0
     while time.time() < deadline:
         time.sleep(3)
         poll_num += 1
         try:
             pr = requests.get(f'{KIE_BASE}/recordInfo?taskId={task_id}', headers=headers, timeout=15)
-            pr.raise_for_status()
             pd = pr.json()
-            if isinstance(pd['data'].get('resultJson'), str):
-                try: pd['data']['result'] = json.loads(pd['data']['resultJson'])
+            raw = pd.get('data', {})
+            if isinstance(raw.get('resultJson'), str):
+                try: raw['result'] = json.loads(raw['resultJson'])
                 except: pass
-            state = pd['data'].get('state')
-            pct = min(10 + poll_num * 8, 88)
+            state = raw.get('state', '')
+            pct = min(10 + poll_num * 6, 90)
             emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': f'Generating… ({state})', 'pct': pct})
+            log.info(f"KIE image poll [{job_id}] #{poll_num} state={state}")
             if state == 'success':
-                res = pd['data'].get('result', {})
-                urls = (res.get('resultUrls')
-                        or [v['url'] for v in res.get('images', [])]
-                        or [v['url'] for v in res.get('videos', [])]
-                        or ([res['url']] if res.get('url') else []))
-                if urls:
-                    img_url = urls[0]
-                    total_cost = log_cost(job_id, 'kie', model, 'image', model_name, cost_per)
-                    emit_to(socket_id, 'job:complete', {
-                        'job_id': job_id, 'url': img_url, 'cost': total_cost, 'provider': 'kie'
-                    })
-                    emit_to(socket_id, 'cost:update', {'today_total': today_total()})
-                    log.info(f"KIE image complete [{job_id}] cost=${total_cost:.4f}")
+                res = raw.get('result') or {}
+                img_url = _kie_extract_image_url(res)
+                if not img_url:
+                    # Dump what we got so we can debug
+                    log.error(f"KIE image success but no URL [{job_id}]: {json.dumps(raw)[:500]}")
+                    emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'KIE returned success but no image URL — check logs'})
                     return
-            elif state == 'fail':
-                emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'KIE image generation failed'})
+                total_cost = log_cost(job_id, 'kie', model, 'image', model_name, cost_per)
+                emit_to(socket_id, 'job:complete', {'job_id': job_id, 'url': img_url, 'cost': total_cost, 'provider': 'kie'})
+                emit_to(socket_id, 'cost:update', {'today_total': today_total()})
+                log.info(f"KIE image complete [{job_id}] cost=${total_cost:.4f} url={img_url[:60]}")
+                return
+            elif state in ('fail', 'failed', 'error'):
+                err = raw.get('failReason') or raw.get('error') or 'KIE generation failed'
+                emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'KIE failed: {err}'})
                 return
         except Exception as e:
-            log.warning(f"KIE image poll error [{job_id}]: {e}")
+            log.warning(f"KIE image poll error [{job_id}] #{poll_num}: {e}")
 
-    emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'KIE image timed out'})
+    emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'KIE image timed out after 5 min'})
 
 
 # ── API Routes ────────────────────────────────────────────────────────────────
@@ -979,13 +1009,14 @@ def api_debug_image():
 @app.route('/api/debug/kie-image')
 def api_debug_kie_image():
     """Full KIE image generation test — submits real task and polls to completion."""
-    model = request.args.get('model', 'kolors')
+    model = request.args.get('model', 'nano-banana-pro')
     prompt = request.args.get('prompt', 'a beautiful woman smiling, studio photography')
     key_hint = (KIE_API_KEY[:8] + '…') if KIE_API_KEY else 'NOT SET'
     headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
+    inp = _kie_image_input(model, prompt, '9:16')
     try:
         r = requests.post(f'{KIE_BASE}/createTask', headers=headers,
-                          json={'model': model, 'input': {'prompt': prompt, 'aspect_ratio': '9:16'}},
+                          json={'model': model, 'input': inp},
                           timeout=30)
         d = r.json()
         if d.get('code') != 200:

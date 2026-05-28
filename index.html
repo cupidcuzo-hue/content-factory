@@ -389,16 +389,17 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
           <div class="fg">
             <label class="fl">Model</label>
             <select id="sd-m">
-              <optgroup label="── KIE (Working ✓) ──">
-                <option value="kolors" selected>Kolors Fast ⚡</option>
-                <option value="kolors-virtual-try-on">Kolors Virtual Try-On</option>
-                <option value="kling-image/v1-standard">Kling Image Standard</option>
-                <option value="kling-image/v1-pro">Kling Image Pro</option>
+              <optgroup label="── KIE ──">
+                <option value="nano-banana-pro" selected>NanoBanana Pro ⚡</option>
+                <option value="nano-banana-2">NanoBanana 2</option>
+                <option value="google/nano-banana">NanoBanana</option>
+                <option value="grok-imagine/text-to-image">Grok Imagine</option>
+                <option value="google/imagen4">Google Imagen 4</option>
+                <option value="google/imagen4-ultra">Google Imagen 4 Ultra</option>
+                <option value="gpt-image-2-text-to-image">GPT Image 2</option>
               </optgroup>
-              <optgroup label="── Laozhang (Working ✓) ──">
+              <optgroup label="── Laozhang ──">
                 <option value="gpt-image-1">GPT-Image-1</option>
-              </optgroup>
-              <optgroup label="── Laozhang (Needs channel activation) ──">
                 <option value="seedream/4.5-edit">Seedream 4.5 Edit ✦ refs</option>
                 <option value="seedream/4.5-text-to-image">Seedream 4.5 Text</option>
                 <option value="bytedance/seedream-v4-text-to-image">Seedream 4.0</option>
@@ -406,8 +407,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
                 <option value="flux-1.1-pro">Flux 1.1 Pro</option>
                 <option value="flux-1-dev">Flux Dev</option>
                 <option value="flux-1-schnell">Flux Schnell ⚡</option>
-                <option value="nano-banana-pro">NanoBanana Pro ⚡</option>
-                <option value="dall-e-3">DALL-E 3</option>
+                <option value="nano-banana-pro-lz">NanoBanana Pro</option>
                 <option value="grok-2-aurora">Grok Aurora</option>
                 <option value="imagen-3.0-generate-002">Gemini Imagen 3</option>
               </optgroup>
@@ -903,10 +903,13 @@ const COSTS = {
   'gpt-image-1':                         0.040,
   'dall-e-3':                            0.080,
   // ── KIE image ──
-  'kolors':                              0.030,
-  'kolors-virtual-try-on':              0.050,
-  'kling-image/v1-standard':             0.035,
-  'kling-image/v1-pro':                  0.060,
+  'nano-banana-pro':                     0.040,
+  'nano-banana-2':                       0.040,
+  'google/nano-banana':                  0.020,
+  'grok-imagine/text-to-image':          0.060,
+  'google/imagen4':                      0.050,
+  'google/imagen4-ultra':                0.080,
+  'gpt-image-2-text-to-image':           0.040,
   // ── KIE video ──
   'kling/v2-1-standard':                 0.125,
   'kling/v2-1-pro':                      0.250,
@@ -932,8 +935,8 @@ let hModelFil = 'all', hTypeFil = 'all';
 let imageProvider = 'kie'; // 'laozhang' | 'kie' — KIE default (Laozhang needs top-up)
 let videoProvider = 'kie';      // 'laozhang' | 'kie' — KIE is default for video
 
-const KIE_IMAGE_MODELS = new Set(['kolors','kolors-virtual-try-on','kling-image/v1-standard','kling-image/v1-pro']);
-const LZ_IMAGE_MODELS  = new Set(['gpt-image-1','dall-e-3','seedream/4.5-edit','seedream/4.5-text-to-image','bytedance/seedream-v4-text-to-image','bytedance/seedream','nano-banana-pro','grok-2-aurora','imagen-3.0-generate-002','flux-1.1-pro','flux-1-dev','flux-1-schnell']);
+const KIE_IMAGE_MODELS = new Set(['nano-banana-pro','nano-banana-2','google/nano-banana','grok-imagine/text-to-image','google/imagen4','google/imagen4-ultra','gpt-image-2-text-to-image']);
+const LZ_IMAGE_MODELS  = new Set(['gpt-image-1','seedream/4.5-edit','seedream/4.5-text-to-image','bytedance/seedream-v4-text-to-image','bytedance/seedream','nano-banana-pro-lz','grok-2-aurora','imagen-3.0-generate-002','flux-1.1-pro','flux-1-dev','flux-1-schnell']);
 
 function setImageProvider(p) {
   imageProvider = p;
@@ -945,8 +948,8 @@ function setImageProvider(p) {
   const sel = $('sd-m');
   if (sel) {
     const cur = sel.value;
-    if (p === 'kie' && LZ_IMAGE_MODELS.has(cur)) sel.value = 'kolors';
-    if (p === 'laozhang' && KIE_IMAGE_MODELS.has(cur)) sel.value = 'seedream/4.5-text-to-image';
+    if (p === 'kie' && LZ_IMAGE_MODELS.has(cur)) sel.value = 'nano-banana-pro';
+    if (p === 'laozhang' && KIE_IMAGE_MODELS.has(cur)) sel.value = 'gpt-image-1';
   }
   _updateRefNote();
   updateCostPreviews();
