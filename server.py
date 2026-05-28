@@ -207,7 +207,7 @@ def _lz_payload(model: str, prompt: str, ratio: str, resolution: str, ref_urls: 
         p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'high'}
     elif model in GPTI2_MODELS:
         size = GPTI2_SIZE_MAP.get(ratio, '1024x1792')
-        p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'standard'}
+        p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'high'}
     else:
         size = IMG_SIZE_MAP.get((ratio, resolution), '1024x1820')
         p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'hd'}
