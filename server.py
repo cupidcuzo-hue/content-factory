@@ -357,8 +357,10 @@ def gen_image(job_id: str, prompt: str, resolution: str, ratio: str,
                 body = e.response.text[:300]
         except Exception:
             pass
-        log.error(f"Laozhang image gen failed [{job_id}]: {e} | body={body}")
-        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'Laozhang error: {body or str(e)}'})
+        log.warning(f"Laozhang image failed [{job_id}], falling back to KIE: {e} | {body[:100]}")
+        # Auto-fallback to KIE when Laozhang is down / no channels
+        emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Laozhang unavailable — retrying via KIE…', 'pct': 20})
+        gen_image_kie(job_id, prompt, ratio, model_name, socket_id, model='nano-banana-pro')
         return
 
     total_cost = log_cost(job_id, 'laozhang', model, 'image', model_name, cost_per)
@@ -426,9 +428,14 @@ def gen_image_batch(job_ids: list, prompt: str, resolution: str, ratio: str,
                 body = e.response.text[:300]
         except Exception:
             pass
-        log.error(f"Laozhang batch gen failed: {e} | body={body}")
+        log.warning(f"Laozhang batch failed, falling back to KIE per-image: {e} | {body[:100]}")
+        # Auto-fallback: fire one KIE job per image
         for jid in job_ids:
-            emit_to(socket_id, 'job:failed', {'job_id': jid, 'error': f'Laozhang error: {body or str(e)}'})
+            emit_to(socket_id, 'job:progress', {'job_id': jid, 'status': 'Laozhang unavailable — retrying via KIE…', 'pct': 20})
+            threading.Thread(target=gen_image_kie, daemon=True, kwargs=dict(
+                job_id=jid, prompt=prompt, ratio=ratio,
+                model='nano-banana-pro', model_name=model_name, socket_id=socket_id,
+            )).start()
         return
 
     date_str = datetime.date.today().strftime('%Y%m%d')
