@@ -1857,7 +1857,7 @@ async function genVi(mid) {
     if(viStartFrameB64){ btn.innerHTML='<div class="spinner"></div>Uploading start frame…'; startFrameUrl=await uploadCld(viStartFrameB64,'vi_start_'+Date.now()); }
   } catch(e){ alert('Frame upload failed: '+e.message); btn.disabled=false; btn.textContent='Generate'; return; }
 
-  const isKling3 = model==='kling-3.0/video';
+  const isKling3 = model==='kling-3.0/video' || model.startsWith('kling/v2-1') || model.includes('kling-2.6');
   const viMode = $('vi-mode') ? $('vi-mode').value : 'std';
 
   btn.innerHTML='<div class="spinner"></div>Submitting…';

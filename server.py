@@ -531,7 +531,7 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
         if mode and is_kling3:
             payload_input['mode'] = mode
         if image_url:
-            payload_input['image_urls'] = [image_url]
+            payload_input['image_url'] = image_url
 
     headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
 
