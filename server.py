@@ -549,8 +549,9 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
 
         payload_input = {
             'prompt': prompt,
+            'negative_prompt': '',   # required by KIE even when empty
             'aspect_ratio': ratio,
-            'duration': str(safe_dur),
+            'duration': int(safe_dur),  # KIE expects integer, not string
         }
         if mode and is_kling3:
             payload_input['mode'] = mode
@@ -1083,6 +1084,38 @@ def api_debug_kie_image():
             if state == 'fail':
                 return jsonify({'key_hint': key_hint, 'model': model, 'task_id': task_id, 'status': 'fail', 'data': pd['data']})
         return jsonify({'key_hint': key_hint, 'model': model, 'task_id': task_id, 'status': 'still_polling — check manually'})
+    except Exception as e:
+        return jsonify({'key_hint': key_hint, 'model': model, 'error': str(e)}), 502
+
+
+@app.route('/api/debug/kie-video')
+def api_debug_kie_video():
+    """Dry-run KIE video createTask — shows EXACTLY what we send and what KIE replies.
+    Does NOT poll to completion (video takes too long). Just verifies the submit succeeds.
+    Usage: /api/debug/kie-video?model=kling/v2-1-standard&duration=5&ratio=9:16
+    """
+    model    = request.args.get('model', 'kling/v2-1-standard')
+    duration = int(request.args.get('duration', '5'))
+    ratio    = request.args.get('ratio', '9:16')
+    mode     = request.args.get('mode', 'std')
+    key_hint = (KIE_API_KEY[:8] + '…') if KIE_API_KEY else 'NOT SET'
+    headers  = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
+    payload_input = {
+        'prompt': 'beautiful woman walking on beach, cinematic',
+        'negative_prompt': '',
+        'aspect_ratio': ratio,
+        'duration': duration,
+        'mode': mode,
+    }
+    body = {'model': model, 'input': payload_input}
+    try:
+        r = requests.post(f'{KIE_BASE}/createTask', headers=headers, json=body, timeout=30)
+        try:
+            resp = r.json()
+        except Exception:
+            resp = r.text[:500]
+        return jsonify({'key_hint': key_hint, 'model': model,
+                        'http': r.status_code, 'payload_sent': body, 'response': resp})
     except Exception as e:
         return jsonify({'key_hint': key_hint, 'model': model, 'error': str(e)}), 502
 
