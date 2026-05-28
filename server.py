@@ -486,10 +486,10 @@ def _kie_submit_and_poll(job_id, kie_model, payload_input, socket_id, headers):
     except Exception as e:
         return None, str(e)
 
-    deadline = time.time() + 300
+    deadline = time.time() + 600  # 10 min — KIE queue can be long
     poll_num = 0
     while time.time() < deadline:
-        time.sleep(3 if poll_num < 20 else 5)
+        time.sleep(5 if poll_num < 30 else 10)
         try:
             pr = requests.get(
                 f'{KIE_BASE}/recordInfo?taskId={task_id}', headers=headers, timeout=15
@@ -538,7 +538,7 @@ def _kie_submit_and_poll(job_id, kie_model, payload_input, socket_id, headers):
 
         except Exception as e:
             log.warning(f"Poll error [{job_id}]: {e}")
-    return None, 'Timed out after 300s'
+    return None, 'Timed out after 10 min — KIE queue is very long, try again later'
 
 
 def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
@@ -618,11 +618,6 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
     headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
 
     video_url, err = _kie_submit_and_poll(job_id, kie_model, payload_input, socket_id, headers)
-
-    if err and not video_url:
-        log.warning(f"Video job failed [{job_id}], retrying in 5s: {err}")
-        time.sleep(5)
-        video_url, err = _kie_submit_and_poll(job_id, kie_model, payload_input, socket_id, headers)
 
     if not video_url:
         log.error(f"Video job failed [{job_id}] after retry: {err}")
@@ -1217,7 +1212,7 @@ def api_debug_kie_video_poll():
         return jsonify({'error': str(e)}), 502
 
     polls = []
-    for i in range(18):  # poll up to 90s (18 × 5s)
+    for i in range(36):  # poll up to 3 min (36 × 5s)
         time.sleep(5)
         try:
             pr = requests.get(f'{KIE_BASE}/recordInfo?taskId={task_id}', headers=headers, timeout=15)
