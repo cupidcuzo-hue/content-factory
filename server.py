@@ -496,27 +496,46 @@ def _kie_submit_and_poll(job_id, kie_model, payload_input, socket_id, headers):
             )
             pr.raise_for_status()
             pd = pr.json()
-            # Unpack resultJson if it's a string
-            if isinstance(pd['data'].get('resultJson'), str):
+            raw = pd.get('data', {})
+
+            # Unpack resultJson (may be a JSON-encoded string or already a dict)
+            result_json = raw.get('resultJson')
+            if isinstance(result_json, str) and result_json.strip():
                 try:
-                    pd['data']['result'] = json.loads(pd['data']['resultJson'])
+                    raw['result'] = json.loads(result_json)
                 except Exception:
                     pass
-            state = pd['data'].get('state')
+
+            state = raw.get('state', '')
             poll_num += 1
             pct = min(10 + poll_num * 3, 88)
             emit_to(socket_id, 'job:progress', {
                 'job_id': job_id, 'status': f'Processing… ({state})', 'pct': pct
             })
+            log.info(f"KIE poll [{job_id}] #{poll_num} state={state} raw_keys={list(raw.keys())}")
+
             if state == 'success':
-                res = pd['data'].get('result', {})
-                urls = (res.get('resultUrls')
-                        or [v['url'] for v in res.get('videos', [])]
-                        or ([res['url']] if res.get('url') else []))
+                res = raw.get('result') or {}
+                # Try every known URL location KIE uses
+                urls = (
+                    res.get('resultUrls')
+                    or ([res['url']] if res.get('url') else [])
+                    or [v['url'] for v in res.get('videos', []) if v.get('url')]
+                    or raw.get('resultUrls')  # sometimes at data level directly
+                    or ([raw['url']] if raw.get('url') else [])
+                )
                 if urls:
                     return urls[0], None
-            elif state == 'fail':
-                return None, 'KIE generation failed'
+                # success but no URL — log full raw so we can diagnose
+                log.error(f"KIE success but no URL [{job_id}]: {json.dumps(raw)[:800]}")
+                return None, f'KIE returned success but no video URL — raw: {json.dumps(raw)[:300]}'
+
+            elif state in ('fail', 'failed', 'error'):
+                reason = (raw.get('failReason') or raw.get('failMsg')
+                          or raw.get('error') or 'KIE generation failed')
+                log.error(f"KIE fail [{job_id}] state={state} reason={reason}")
+                return None, reason
+
         except Exception as e:
             log.warning(f"Poll error [{job_id}]: {e}")
     return None, 'Timed out after 300s'
@@ -1172,6 +1191,60 @@ def api_debug_kie_video():
         })
     except Exception as e:
         return jsonify({'key_hint': key_hint, 'model': model, 'error': str(e)}), 502
+
+
+@app.route('/api/debug/kie-video-poll')
+def api_debug_kie_video_poll():
+    """Create a KIE video task then poll it for up to 90s — returns every intermediate state.
+    Use this to diagnose what KIE actually returns during processing.
+    Usage: /api/debug/kie-video-poll?model=kling-2.6/text-to-video
+    """
+    model    = request.args.get('model', 'kling-2.6/text-to-video')
+    ratio    = request.args.get('ratio', '9:16')
+    key_hint = (KIE_API_KEY[:8] + '…') if KIE_API_KEY else 'NOT SET'
+    headers  = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
+    prompt   = 'beautiful woman walking, cinematic'
+
+    inp = {'prompt': prompt, 'sound': False, 'aspect_ratio': ratio, 'duration': '5'}
+    try:
+        r = requests.post(f'{KIE_BASE}/createTask', headers=headers,
+                          json={'model': model, 'input': inp}, timeout=20)
+        d = r.json()
+        if d.get('code') != 200:
+            return jsonify({'error': 'createTask failed', 'response': d})
+        task_id = d['data']['taskId']
+    except Exception as e:
+        return jsonify({'error': str(e)}), 502
+
+    polls = []
+    for i in range(18):  # poll up to 90s (18 × 5s)
+        time.sleep(5)
+        try:
+            pr = requests.get(f'{KIE_BASE}/recordInfo?taskId={task_id}', headers=headers, timeout=15)
+            pd_raw = pr.json()
+            raw = pd_raw.get('data', {})
+            # Parse resultJson so we can see its content
+            rj = raw.get('resultJson')
+            parsed_rj = None
+            if isinstance(rj, str) and rj.strip():
+                try: parsed_rj = json.loads(rj)
+                except: parsed_rj = rj[:300]
+            polls.append({
+                'poll': i+1,
+                'state': raw.get('state'),
+                'failCode': raw.get('failCode'),
+                'failMsg': raw.get('failMsg'),
+                'failReason': raw.get('failReason'),
+                'resultJson_parsed': parsed_rj,
+                'data_keys': list(raw.keys()),
+            })
+            s = raw.get('state', '')
+            if s in ('success', 'fail', 'failed', 'error'):
+                break
+        except Exception as e:
+            polls.append({'poll': i+1, 'error': str(e)})
+
+    return jsonify({'key_hint': key_hint, 'model': model, 'task_id': task_id, 'polls': polls})
 
 
 @app.route('/api/test/all')
