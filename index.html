@@ -275,12 +275,43 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
 
 /* MOBILE */
 @media(max-width:768px){
-  #lpanel{position:fixed;bottom:0;left:0;right:0;width:100%;max-height:60vh;z-index:200;border-right:none;border-top:1px solid var(--border);transform:translateY(100%);transition:transform .25s ease}
+  /* Bottom sheet panel */
+  #lpanel{position:fixed;bottom:0;left:0;right:0;width:100%;max-height:75vh;z-index:200;border-right:none;border-top:1px solid var(--border);border-radius:16px 16px 0 0;transform:translateY(100%);transition:transform .25s ease}
   #lpanel.open{transform:translateY(0)}
+  /* Drag handle */
+  #lpanel::before{content:'';display:block;width:36px;height:4px;background:var(--border);border-radius:2px;margin:10px auto 2px;flex-shrink:0}
   #rpanel{width:100%}
-  #mfab{display:flex!important}
+  #mfab{display:flex!important;bottom:24px}
+  /* Prevent iOS zoom on input focus — must be ≥16px */
+  input,textarea,select{font-size:16px!important}
+  /* Panels that would bleed off screen */
+  #spanel{width:min(380px,100vw)!important}
+  #id-panel{width:min(420px,100vw)!important}
+  /* Collapse all two-column form grids */
+  .row2,#vi-frames-row,#vi-toggles-row{grid-template-columns:1fr!important}
+  /* Settings / identity inner form rows */
+  .form-row{grid-template-columns:1fr!important}
+  /* Output grid: 2 columns on mobile */
+  #ogrid{grid-template-columns:repeat(2,1fr)!important;gap:8px;padding:10px}
+  /* History grid: 2 columns */
+  #hgrid{grid-template-columns:repeat(2,1fr)!important}
+  /* Larger tap targets on model chips */
+  .model-chip{padding:7px 16px!important;font-size:13px!important}
+  /* Generate button sticks to bottom of sheet */
+  .gen-btn{position:sticky;bottom:0;z-index:10;margin-top:12px}
+  /* Topbar: hide API/cost stats to save space */
+  .topbar-stat{display:none}
 }
-#mfab{display:none;position:fixed;bottom:16px;right:16px;z-index:199;width:48px;height:48px;background:linear-gradient(135deg,var(--gold),var(--gold2));border-radius:50%;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 20px rgba(212,175,55,.4);border:none;font-size:20px;color:#09090f;font-weight:700}
+
+/* Small phones (≤480px) */
+@media(max-width:480px){
+  /* Hide "Content Factory" text — Cuzo logo stays */
+  #topbar-title{display:none}
+  /* Single column output grid on very small screens */
+  #ogrid{grid-template-columns:repeat(2,1fr)!important}
+}
+
+#mfab{display:none;position:fixed;bottom:16px;right:16px;z-index:199;width:52px;height:52px;background:linear-gradient(135deg,var(--gold),var(--gold2));border-radius:50%;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 20px rgba(212,175,55,.4);border:none;font-size:22px;color:#09090f;font-weight:700}
 </style>
 </head>
 <body>
@@ -307,7 +338,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
 
   <!-- TOPBAR -->
   <div id="topbar">
-    <div class="topbar-logo">Cuzo <span>Content Factory</span></div>
+    <div class="topbar-logo">Cuzo <span id="topbar-title">Content Factory</span></div>
     <div class="topbar-stat"><div id="api-dot"></div><span id="api-txt">No key</span></div>
     <div class="topbar-stat">Today: <strong id="today-cost">~$0.00</strong></div>
     <div id="cuzo-sync-chip" class="topbar-stat" style="cursor:pointer;display:none" onclick="openSettings();setTimeout(()=>document.getElementById('cuzo-url')&&document.getElementById('cuzo-url').scrollIntoView({behavior:'smooth'}),300)">
@@ -466,7 +497,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
           <!-- Start + End frame -->
           <div class="fg">
             <label class="fl">Frames <span>(optional)</span></label>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div id="vi-frames-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
               <!-- Start frame -->
               <div>
                 <div style="font-size:10px;color:var(--muted2);margin-bottom:5px">Start frame</div>
@@ -496,7 +527,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
             </div>
           </div>
           <!-- Toggles row: Multi-shot + Sound -->
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div id="vi-toggles-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
             <div class="fg" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--card);border-radius:8px;border:1px solid var(--border);margin:0">
               <div>
                 <div style="font-size:12px;font-weight:500;color:var(--text)">Multi-shot</div>
