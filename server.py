@@ -1101,37 +1101,46 @@ def api_debug_kie_video():
     key_hint = (KIE_API_KEY[:8] + '…') if KIE_API_KEY else 'NOT SET'
     headers  = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
     prompt_val = 'beautiful woman walking on beach, cinematic'
-    base_no_mode = {
-        'prompt': prompt_val, 'negative_prompt': '',
-        'aspect_ratio': ratio, 'duration': duration,
-    }
-    base_std  = {**base_no_mode, 'mode': 'std'}
-    base_pro  = {**base_no_mode, 'mode': 'pro'}
-    img_url   = 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=512'
-    variants = [
-        ('no-mode',                  base_no_mode),
-        ('mode=std',                 base_std),
-        ('mode=pro',                 base_pro),
-        ('mode=std + image_url',     {**base_std, 'image_url': img_url}),
-        ('no-mode + image_url',      {**base_no_mode, 'image_url': img_url}),
-        ('mode=std + duration=str',  {**base_no_mode, 'mode': 'std', 'duration': str(duration)}),
-        ('mode=std + cfg_scale',     {**base_std, 'cfg_scale': 0.5}),
-        ('minimal: prompt+ar+dur',   {'prompt': prompt_val, 'aspect_ratio': ratio, 'duration': duration}),
-        ('minimal + mode',           {'prompt': prompt_val, 'aspect_ratio': ratio, 'duration': duration, 'mode': 'std'}),
-    ]
-    results = {}
-    for label, inp in variants:
+    img_url    = 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=512'
+
+    # We now know: kling/v2-1-standard REQUIRES image_url, and duration must be STRING.
+    # Goal: (a) confirm i2v works with correct fields, (b) find t2v model string for v2.1
+
+    i2v_base = {'prompt': prompt_val, 'negative_prompt': '', 'aspect_ratio': ratio,
+                'duration': str(duration), 'mode': mode, 'image_url': img_url}
+    t2v_models = ['kling/v2-1', 'kling/v2-1-standard', 'kling/v2-1/t2v',
+                  'kling/v2-1/text-to-video', 'kling-2.6/text-to-video']
+    t2v_base   = {'prompt': prompt_val, 'negative_prompt': '', 'aspect_ratio': ratio,
+                  'duration': str(duration), 'mode': mode}
+
+    results = {'i2v_correct_fields': {}, 't2v_model_probe': {}}
+
+    # Test confirmed i2v path first
+    for m in ['kling/v2-1-standard', 'kling/v2-1-pro']:
         try:
             r = requests.post(f'{KIE_BASE}/createTask', headers=headers,
-                              json={'model': model, 'input': inp}, timeout=30)
-            resp = r.json() if 'application/json' in r.headers.get('content-type','') else r.text[:200]
-            results[label] = {
-                'code': resp.get('code') if isinstance(resp, dict) else r.status_code,
-                'msg':  resp.get('msg')  if isinstance(resp, dict) else resp,
-                'task_id': (resp.get('data') or {}).get('taskId'),
+                              json={'model': m, 'input': i2v_base}, timeout=30)
+            resp = r.json()
+            results['i2v_correct_fields'][m] = {
+                'code': resp.get('code'), 'msg': resp.get('msg'),
+                'task_id': (resp.get('data') or {}).get('taskId')
             }
         except Exception as e:
-            results[label] = {'error': str(e)}
+            results['i2v_correct_fields'][m] = {'error': str(e)}
+
+    # Probe for t2v model strings
+    for m in t2v_models:
+        try:
+            r = requests.post(f'{KIE_BASE}/createTask', headers=headers,
+                              json={'model': m, 'input': t2v_base}, timeout=30)
+            resp = r.json()
+            results['t2v_model_probe'][m] = {
+                'code': resp.get('code'), 'msg': resp.get('msg'),
+                'task_id': (resp.get('data') or {}).get('taskId')
+            }
+        except Exception as e:
+            results['t2v_model_probe'][m] = {'error': str(e)}
+
     return jsonify({'key_hint': key_hint, 'model': model, 'ratio': ratio,
                     'duration': duration, 'mode': mode, 'results': results})
 
