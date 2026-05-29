@@ -878,23 +878,35 @@ function initSocket() {
       if (el) el.textContent = '~$' + today_total.toFixed(2);
     });
 
+    let _reconnectTimer = null;
     socket.on('connect', () => {
       updateApiDot('ok');
-      // On reconnect, fail any cards that were pending — backend lost them on restart
-      if (pendingJobs.size > 0) {
-        for (const [cid] of pendingJobs.entries()) {
-          failCard(cid, 'Server restarted — please generate again');
+      if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null; }
+      // If we just reconnected and jobs are still "reconnecting", fail them — backend lost threads
+      for (const [cid] of pendingJobs.entries()) {
+        const card = $('c-'+cid);
+        if (card && card.querySelector('.creconnecting')) {
+          failCard(cid, 'Server restarted — tap ↺ to retry');
         }
-        pendingJobs.clear();
       }
+      pendingJobs.clear();
     });
     socket.on('disconnect', () => {
       updateApiDot('err');
-      // Immediately fail all pending cards — backend lost them on disconnect
+      // Show "Reconnecting…" state instead of immediately failing
       for (const [cid] of pendingJobs.entries()) {
-        failCard(cid, 'Connection lost — server restarted, please try again');
+        const card = $('c-'+cid);
+        if (card) {
+          card.innerHTML = `<div class="creconnecting" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:8px;color:var(--muted2);font-size:12px"><div class="spinner"></div>Reconnecting…</div>`;
+        }
       }
-      pendingJobs.clear();
+      // Hard-fail after 30s if still not reconnected
+      _reconnectTimer = setTimeout(() => {
+        for (const [cid] of pendingJobs.entries()) {
+          failCard(cid, 'Connection lost — tap ↺ to retry');
+        }
+        pendingJobs.clear();
+      }, 30000);
     });
   } catch(e) {
     console.warn('Socket.io init failed:', e);
@@ -1028,16 +1040,16 @@ function updateKieModeRow() {
   const m = $('vi-m') ? $('vi-m').value : '';
   const showMode = KIE_I2V_MODELS.has(m) || m === '__c'; // show for i2v or custom
   if ($('vi-mode-row')) $('vi-mode-row').style.display = (videoProvider === 'kie' && showMode) ? '' : 'none';
-  // Duration: kling-2.6 and kling-3.0 only accept 5s or 10s — restrict dropdown
+  // Duration: ALL kling models only accept 5s or 10s — restrict dropdown
   const dur = $('vi-d');
   if(!dur) return;
-  const fiveAndTen = ['kling-2.6/text-to-video','kling-3.0/video'].includes(m);
+  const fiveAndTen = m.startsWith('kling') || m.includes('kling');
   const cur = dur.value;
   if(fiveAndTen){
     dur.innerHTML='<option value="5">5s</option><option value="10">10s</option>';
     dur.value = ['5','10'].includes(cur) ? cur : '5';
   } else {
-    // Full 5-15s range for master/pro/standard/custom
+    // Full 5-15s range for non-kling / custom
     if(dur.options.length < 5){
       let html='';
       for(let i=5;i<=15;i++) html+=`<option value="${i}">${i}s</option>`;
@@ -2052,8 +2064,22 @@ function failCard(cid, msg) {
   const item=items.find(x=>x.id===cid); if(item) item.status='failed';
   const card=$('c-'+cid); if(!card) return;
   card.classList.add('fail');
-  card.innerHTML=`<div class="cfail"><div class="cfail-icon">&#9888;</div><div class="cfail-msg">${esc(msg||'Unknown error')}</div></div>`;
+  card.innerHTML=`<div class="cfail"><div class="cfail-icon">&#9888;</div><div class="cfail-msg">${esc(msg||'Unknown error')}</div><button class="cretry" onclick="retryJob('${cid}')">↺ Retry</button></div>`;
   updateBadge();
+}
+
+function retryJob(cid) {
+  const item = items.find(x=>x.id===cid);
+  if(!item) return;
+  // Pre-fill prompt and trigger generation on the right tab
+  const mid = item.mid;
+  if(item.type==='video'){
+    $('vi-p').value = item.prompt||'';
+    setActiveTab(mid, 'video');
+  } else {
+    $('sd-p').value = item.prompt||'';
+    setActiveTab(mid, 'image');
+  }
 }
 
 function updateBadge() {
@@ -2066,7 +2092,7 @@ function updateBadge() {
 
 // ── ACTIONS ──
 async function dlUrl(url, id) {
-  const fullUrl = url.startsWith('/') ? (location.origin + url) : url;
+  const fullUrl = url.startsWith('/') ? (BASE_URL + url) : url;
   const ext = /\.(mp4|webm|mov)(\?|$)/i.test(url) ? 'mp4' : url.startsWith('/api/img/') ? 'png' : 'jpg';
   // For cached images, verify they still exist before triggering download
   if (url.startsWith('/api/img/')) {
