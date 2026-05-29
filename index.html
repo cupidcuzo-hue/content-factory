@@ -1001,6 +1001,13 @@ let videoProvider = 'kie';      // 'laozhang' | 'kie' — KIE is default for vid
 const KIE_IMAGE_MODELS = new Set(['nano-banana-pro','nano-banana-2','google/nano-banana','grok-imagine/text-to-image','google/imagen4','google/imagen4-ultra','gpt-image-2-text-to-image']);
 const LZ_IMAGE_MODELS  = new Set(['gpt-image-2','gpt-image-2-all','gpt-image-2-vip','gemini-2.5-flash-image','gemini-3.1-flash-image-preview','gemini-3-pro-image-preview','gpt-image-1','seedream/4.5-edit','seedream/4.5-text-to-image','bytedance/seedream-v4-text-to-image','bytedance/seedream','grok-2-aurora','imagen-3.0-generate-002','flux-1.1-pro','flux-1-dev','flux-1-schnell']);
 
+// Models confirmed to support reference photos (image_input sent to API)
+// KIE: nano-banana family sends image_input — confirmed working
+// Laozhang: only seedream/4.5-edit officially supports refs; text models accept image_input but results vary
+const REF_SUPPORTED = new Set(['nano-banana-pro','nano-banana-2','google/nano-banana','seedream/4.5-edit']);
+const REF_PARTIAL   = new Set(['seedream/4.5-text-to-image','bytedance/seedream-v4-text-to-image','bytedance/seedream','flux-1.1-pro','flux-1-dev','flux-1-schnell','grok-2-aurora','imagen-3.0-generate-002']);
+// Everything else: refs uploaded but silently dropped by API — don't bother uploading
+
 function setImageProvider(p) {
   imageProvider = p;
   $('img-src-lz').classList.toggle('active', p === 'laozhang');
@@ -1021,18 +1028,15 @@ function setImageProvider(p) {
 function _updateRefNote() {
   const note = $('sd-ref-note'); if (!note) return;
   const m = ($('sd-m') || {}).value || '';
-  if (imageProvider === 'kie') {
-    note.textContent = '(ref support varies by KIE model)';
-    note.style.color = 'var(--muted2)';
-  } else if (m === 'seedream/4.5-edit') {
-    note.textContent = '✓ sent to API as reference';
+  if (REF_SUPPORTED.has(m)) {
+    note.textContent = '✓ sent to API as face reference';
     note.style.color = 'var(--success,#4caf50)';
-  } else if (m.startsWith('seedream') || m.startsWith('bytedance/seedream')) {
-    note.textContent = '(Edit model required to use refs)';
-    note.style.color = 'var(--muted2)';
+  } else if (REF_PARTIAL.has(m)) {
+    note.textContent = '⚠ sent as image_input — results vary';
+    note.style.color = 'var(--warn,#f59e0b)';
   } else {
-    note.textContent = '(optional — may be used as style guide)';
-    note.style.color = 'var(--muted2)';
+    note.textContent = '✗ not supported by this model — refs ignored';
+    note.style.color = 'var(--error,#ef4444)';
   }
 }
 
@@ -1898,16 +1902,18 @@ async function genSd(mid) {
   const cost=getCost(model);
   const btn=$('sd-gen'); btn.disabled=true;
 
-  // Upload ref photos for both Laozhang and KIE (KIE uses image_input for nano-banana-pro)
+  // Upload ref photos only for models that actually support them
   let refUrls=[];
   const refs=getRefs(mid);
-  if(refs.length>0){
+  const modelSupportsRefs = REF_SUPPORTED.has(model) || REF_PARTIAL.has(model);
+  if(refs.length>0 && modelSupportsRefs){
     if(!getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings to use reference photos.');btn.disabled=false;btn.textContent='Generate';return;}
     try{
       btn.innerHTML='<div class="spinner"></div>Uploading refs…';
       refUrls=await getRefUrls(mid);
     } catch(e){alert('Ref upload failed: '+e.message);btn.disabled=false;btn.textContent='Generate';return;}
   }
+  // If refs exist but model doesn't support them — skip silently (user already sees ✗ in UI note)
 
   btn.innerHTML='<div class="spinner"></div>Submitting…';
   const m=MODELS.find(x=>x.id===mid);
