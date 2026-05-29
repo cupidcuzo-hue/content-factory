@@ -158,6 +158,7 @@ VIDEO_COSTS = {
     'kling/v2-1-master-text-to-video':   0.800,
     'kling-3.0/video':                   0.350,
     'kling-2.6/text-to-video':           0.250,
+    'kling-2.6/image-to-video':          0.250,
     'kling-3.0/motion-control':          0.500,
     'kling-2.6/motion-control':          0.350,
 }
@@ -580,7 +581,7 @@ def _kie_submit_and_poll(job_id, kie_model, payload_input, socket_id, headers):
 def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
               image_url: str | None, mode: str | None, model_name: str, socket_id: str,
               mc_input_urls: list | None = None, mc_video_urls: list | None = None,
-              mc_orientation: str | None = None):
+              mc_orientation: str | None = None, sound: bool = False):
     """Generate video via KIE.ai, upload to Drive, log cost.
     Motion control mode: pass mc_input_urls + mc_video_urls instead of prompt/duration.
     """
@@ -607,19 +608,32 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
         dur_str = str(raw_dur)
 
         # ── kling-2.6 text-to-video ──────────────────────────────────────────
-        # Docs: {prompt, sound, aspect_ratio, duration}  — NO mode, NO negative_prompt
         if kie_model in ('kling-2.6/text-to-video', 'kling-3.0/video'):
             payload_input = {
                 'prompt': prompt,
-                'sound': False,
+                'sound': sound,
                 'aspect_ratio': ratio,
                 'duration': dur_str,
             }
-            if image_url:  # optional start frame
+            if image_url:  # optional start frame (may not be supported — KIE will reject)
                 payload_input['image_url'] = image_url
 
+        # ── kling-2.6 image-to-video ─────────────────────────────────────────
+        elif kie_model == 'kling-2.6/image-to-video':
+            if not image_url:
+                log.warning(f"[{job_id}] kling-2.6/image-to-video requires start frame — falling back to t2v")
+                kie_model = 'kling-2.6/text-to-video'
+                payload_input = {'prompt': prompt, 'sound': sound, 'aspect_ratio': ratio, 'duration': dur_str}
+            else:
+                payload_input = {
+                    'prompt': prompt,
+                    'sound': sound,
+                    'aspect_ratio': ratio,
+                    'duration': dur_str,
+                    'image_url': image_url,
+                }
+
         # ── kling v2.1 master text-to-video ──────────────────────────────────
-        # Docs: {prompt, duration, aspect_ratio, negative_prompt, cfg_scale}  — NO mode
         elif kie_model == 'kling/v2-1-master-text-to-video':
             payload_input = {
                 'prompt': prompt,
@@ -632,7 +646,6 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
                 payload_input['image_url'] = image_url
 
         # ── kling v2.1 i2v: standard / pro / master ──────────────────────────
-        # These require image_url.  If none provided → fall back to kling-2.6 t2v
         else:
             if not image_url:
                 log.warning(f"[{job_id}] {kie_model} is image-to-video but no start frame supplied "
@@ -640,7 +653,7 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
                 kie_model = 'kling-2.6/text-to-video'
                 payload_input = {
                     'prompt': prompt,
-                    'sound': False,
+                    'sound': sound,
                     'aspect_ratio': ratio,
                     'duration': dur_str,
                 }
@@ -999,6 +1012,7 @@ def api_gen_video():
             mc_input_urls=d.get('mc_input_urls'),
             mc_video_urls=d.get('mc_video_urls'),
             mc_orientation=d.get('mc_orientation'),
+            sound=bool(d.get('sound', False)),
         ))
     t.start()
     return jsonify({'ok': True, 'job_id': d['job_id']})

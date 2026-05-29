@@ -560,7 +560,8 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
           <div class="fg" id="vi-model-row">
             <label class="fl">Model</label>
             <select id="vi-m">
-              <option value="kling-2.6/text-to-video" selected>⚡ Kling 2.6 (Text-to-Video)</option>
+              <option value="kling-2.6/text-to-video" selected>⚡ Kling 2.6 (Text only)</option>
+              <option value="kling-2.6/image-to-video">⚡ Kling 2.6 (Start Frame)</option>
               <option value="kling/v2-1-master-text-to-video">Kling v2.1 Master T2V</option>
               <option value="kling-3.0/video">Kling 3.0 ⚠️ (KIE server down)</option>
               <option value="kling/v2-1-standard">Kling v2.1 Standard [Start Frame]</option>
@@ -1949,8 +1950,9 @@ async function genVi(mid) {
   for(let i=0;i<cnt;i++){
     const cid=uid(); addPend(cid,mid,'video',prompt,'Video '+(i+1)+'/'+cnt,ratio);
     pendingJobs.set(cid,{mid,type:'video',prompt,model,cost,ratio});
+    const sound = $('vi-sound') ? $('vi-sound').checked : false;
     fetch(BASE_URL+'/api/generate/video',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({job_id:cid,prompt,model,provider:videoProvider,duration:dur,ratio,image_url:startFrameUrl,mode:isKling3?viMode:null,model_name:m?.name||mid,socket_id:socket?.id||''})
+      body:JSON.stringify({job_id:cid,prompt,model,provider:videoProvider,duration:dur,ratio,image_url:startFrameUrl,mode:isKling3?viMode:null,sound,model_name:m?.name||mid,socket_id:socket?.id||''})
     }).catch(e=>{ pendingJobs.delete(cid); failCard(cid,e.message||'Submit failed'); });
   }
   btn.disabled=false; btn.textContent='Generate';
