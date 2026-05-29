@@ -161,6 +161,7 @@ VIDEO_COSTS = {
     'kling-2.6/image-to-video':          0.250,
     'kling-3.0/motion-control':          0.500,
     'kling-2.6/motion-control':          0.350,
+    'bytedance/seedance-2':              0.200,
 }
 
 LAOZHANG_VIDEO_COSTS = {
@@ -604,21 +605,46 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
         if mc_orientation and 'kling-3.0' not in kie_model:
             payload_input['character_orientation'] = mc_orientation
     else:
-        # All kling models only accept 5 or 10 — clamp here as safety net
+        # Kling 2.6 / v2.1 = 5s or 10s only; Kling 3.0 = 3–15s; others unrestricted
         raw_dur = int(duration or 5)
-        if kie_model.startswith('kling'):
+        if kie_model in ('kling-2.6/text-to-video', 'kling-2.6/image-to-video') or kie_model.startswith('kling/v2-1'):
             raw_dur = 10 if raw_dur > 7 else 5
+        elif kie_model == 'kling-3.0/video':
+            raw_dur = max(3, min(15, raw_dur))
         dur_str = str(raw_dur)
 
+        # ── kling 3.0 — uses image_urls array + multi_shots:false ────────────
+        if kie_model == 'kling-3.0/video':
+            payload_input = {
+                'prompt': prompt,
+                'sound': sound,
+                'aspect_ratio': ratio,
+                'duration': dur_str,
+                'multi_shots': False,
+            }
+            if image_url:
+                payload_input['image_urls'] = [image_url]
+
         # ── kling-2.6 text-to-video ──────────────────────────────────────────
-        if kie_model in ('kling-2.6/text-to-video', 'kling-3.0/video'):
+        elif kie_model == 'kling-2.6/text-to-video':
             payload_input = {
                 'prompt': prompt,
                 'sound': sound,
                 'aspect_ratio': ratio,
                 'duration': dur_str,
             }
-            if image_url:  # optional start frame (may not be supported — KIE will reject)
+            if image_url:  # optional start frame
+                payload_input['image_url'] = image_url
+
+        # ── Seedance 2.0 ─────────────────────────────────────────────────────
+        elif kie_model == 'bytedance/seedance-2':
+            payload_input = {
+                'prompt': prompt,
+                'resolution': '720p',
+                'aspect_ratio': ratio,
+                'duration': int(duration or 5),
+            }
+            if image_url:
                 payload_input['image_url'] = image_url
 
         # ── kling-2.6 image-to-video (removed from UI — routes to v2-1-pro) ────
@@ -1227,8 +1253,16 @@ def api_debug_kie_video():
     dur_str   = str(int(duration))
 
     # Build payload using the same logic as gen_video()
-    if model in ('kling-2.6/text-to-video', 'kling-3.0/video'):
+    if model == 'kling-3.0/video':
+        inp = {'prompt': prompt, 'sound': False, 'aspect_ratio': ratio, 'duration': dur_str, 'multi_shots': False}
+        if image_url:
+            inp['image_urls'] = [image_url]
+    elif model == 'kling-2.6/text-to-video':
         inp = {'prompt': prompt, 'sound': False, 'aspect_ratio': ratio, 'duration': dur_str}
+        if image_url:
+            inp['image_url'] = image_url
+    elif model == 'bytedance/seedance-2':
+        inp = {'prompt': prompt, 'resolution': '720p', 'aspect_ratio': ratio, 'duration': int(duration)}
         if image_url:
             inp['image_url'] = image_url
     elif model == 'kling/v2-1-master-text-to-video':
