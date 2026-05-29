@@ -978,6 +978,7 @@ const COSTS = {
   'kling/v2-1-master-text-to-video':     0.800,
   'kling-3.0/video':                     0.350,
   'kling-2.6/text-to-video':             0.250,
+  'kling-2.6/image-to-video':           0.250,
   'kling-3.0/motion-control':            0.500,
   'kling-2.6/motion-control':            0.350,
   // ── Laozhang video ──
@@ -1936,9 +1937,10 @@ async function genVi(mid) {
     if(viStartFrameB64){ btn.innerHTML='<div class="spinner"></div>Uploading start frame…'; startFrameUrl=await uploadCld(viStartFrameB64,'vi_start_'+Date.now()); }
   } catch(e){ alert('Frame upload failed: '+e.message); btn.disabled=false; btn.textContent='Generate'; return; }
 
-  const isKling3 = model==='kling-3.0/video' || model.startsWith('kling/v2-1') || model.includes('kling-2.6');
+  // mode param only needed for kling/v2-1 models (720p/1080p/4K quality tier)
+  const isKling3 = model.startsWith('kling/v2-1');
   // i2v models require a start frame; warn user (backend will auto-fallback to kling-2.6 t2v)
-  const I2V_MODELS = ['kling/v2-1-standard','kling/v2-1-pro','kling/v2-1-master'];
+  const I2V_MODELS = ['kling/v2-1-standard','kling/v2-1-pro','kling/v2-1-master','kling-2.6/image-to-video'];
   if(I2V_MODELS.includes(model) && !startFrameUrl) {
     const go = confirm(`"${model}" is an Image-to-Video model and requires a Start Frame.\n\nNo start frame was uploaded — the backend will fall back to Kling 2.6 Text-to-Video instead.\n\nContinue anyway?`);
     if(!go){btn.disabled=false;btn.textContent='Generate';return;}
