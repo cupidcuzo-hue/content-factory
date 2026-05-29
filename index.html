@@ -1284,7 +1284,13 @@ function bindAll() {
 
   // Custom model toggles
   $('sd-m').addEventListener('change', () => {
-    $('sd-mc').style.display=$('sd-m').value==='__c'?'':'none';
+    const mv = $('sd-m').value;
+    $('sd-mc').style.display = mv === '__c' ? '' : 'none';
+    // Auto-switch provider to match the selected model group
+    if (mv !== '__c') {
+      if (KIE_IMAGE_MODELS.has(mv) && imageProvider !== 'kie') setImageProvider('kie');
+      else if (LZ_IMAGE_MODELS.has(mv) && imageProvider !== 'laozhang') setImageProvider('laozhang');
+    }
     _updateRefNote();
     updateCostPreviews();
   });
@@ -1989,8 +1995,8 @@ function restoreFromHistory() {
     card.className='gcard'+ratCls(ratio); card.id='c-'+h.id;
     const safeUrl=(h.url||'').replace(/'/g,"\\'");
     const media=isVid
-      ?`<video src="${h.url}" loop muted playsinline preload="metadata"></video>`
-      :`<img src="${h.url}" loading="lazy" alt="">`;
+      ?`<video src="${h.url.startsWith('/')?BASE_URL+h.url:h.url}" loop muted playsinline preload="metadata"></video>`
+      :`<img src="${h.url.startsWith('/')?BASE_URL+h.url:h.url}" loading="lazy" alt="">`;
     card.innerHTML=`${media}<div class="cbadge" style="color:${m.color}">${esc(m.name)}</div><div class="ctype">${isVid?'Video':'Image'}</div><div class="covlay"><div class="covprompt">${esc(h.prompt||'')}</div><div class="covact"><button class="covbtn" onclick="dlUrl('${safeUrl}','${h.id}')">Download</button><button class="covbtn" onclick="cpUrl('${safeUrl}')">Copy URL</button><span class="covcost">~${f$(h.estimatedCost||0)}</span></div></div>`;
     if(isVid){const v=card.querySelector('video');card.addEventListener('mouseenter',()=>v.play());card.addEventListener('mouseleave',()=>{v.pause();v.currentTime=0;});}
     const target=getTarget(h.modelId);
@@ -2058,7 +2064,8 @@ function succCard(cid, mid, type, url, prompt, model, cost) {
   );
   const isVid=type==='video';
   const m=MODELS.find(x=>x.id===mid);
-  const media=isVid?`<video src="${url}" loop muted playsinline preload="metadata"></video>`:`<img src="${url}" loading="lazy" alt="">`;
+  const displayUrl = url.startsWith('/') ? BASE_URL + url : url;
+  const media=isVid?`<video src="${displayUrl}" loop muted playsinline preload="metadata"></video>`:`<img src="${displayUrl}" loading="lazy" alt="">`;
   card.innerHTML=`${media}<div class="cbadge" style="color:${m.color}">${m.name}</div><div class="ctype">${isVid?'Video':'Image'}</div><div class="covlay"><div class="covprompt">${esc(prompt)}</div><div class="covact"><button class="covbtn" onclick="dlUrl('${url}','${cid}')">Download</button><button class="covbtn" onclick="cpUrl('${url}')">Copy URL</button><span class="covcost">~${f$(cost)}</span></div></div>`;
   if(isVid){const v=card.querySelector('video');v.play().catch(()=>{}); card.addEventListener('mouseenter',()=>v.play());card.addEventListener('mouseleave',()=>{v.pause();v.currentTime=0;});}
   updateBadge();
@@ -2109,7 +2116,7 @@ async function dlUrl(url, id) {
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 function cpUrl(url) {
-  const fullUrl = url.startsWith('/') ? (location.origin + url) : url;
+  const fullUrl = url.startsWith('/') ? (BASE_URL + url) : url;
   navigator.clipboard.writeText(fullUrl).catch(()=>alert('URL: '+fullUrl));
 }
 function dlAll() {
@@ -2424,7 +2431,8 @@ function renderHistory() {
     const m=MODELS.find(y=>y.id===x.modelId)||{color:'#888',name:x.modelId};
     const card=document.createElement('div'); card.className='hcard';
     const isVid=x.type==='video';
-    card.innerHTML=(isVid?`<video src="${x.url}" muted loop playsinline preload="metadata"></video>`:`<img src="${x.url}" loading="lazy">`)+`<div class="hcard-info"><div class="hcard-model" style="color:${m.color}">${m.name}</div><div class="hcard-prompt">${esc(x.prompt)}</div></div>`;
+    const hUrl = x.url.startsWith('/') ? BASE_URL+x.url : x.url;
+    card.innerHTML=(isVid?`<video src="${hUrl}" muted loop playsinline preload="metadata"></video>`:`<img src="${hUrl}" loading="lazy">`)+`<div class="hcard-info"><div class="hcard-model" style="color:${m.color}">${m.name}</div><div class="hcard-prompt">${esc(x.prompt)}</div></div>`;
     if(isVid){const v=card.querySelector('video');card.addEventListener('mouseenter',()=>v.play());card.addEventListener('mouseleave',()=>{v.pause();v.currentTime=0;});}
     card.addEventListener('click',()=>openViewer(x.url,x.type,x.prompt));
     g.appendChild(card);
@@ -2434,8 +2442,9 @@ function renderHistory() {
 // ── VIEWER ──
 function openViewer(url, type, prompt) {
   $('viewer').classList.add('open');
-  if(type==='video'){$('vimg').style.display='none';$('vvid').style.display='';$('vvid').src=url;}
-  else{$('vvid').style.display='none';$('vimg').style.display='';$('vimg').src=url;}
+  const vUrl = url.startsWith('/') ? BASE_URL+url : url;
+  if(type==='video'){$('vimg').style.display='none';$('vvid').style.display='';$('vvid').src=vUrl;}
+  else{$('vvid').style.display='none';$('vimg').style.display='';$('vimg').src=vUrl;}
   $('vprompt').textContent=prompt||'';
 }
 function closeViewer() { $('viewer').classList.remove('open'); $('vvid').pause(); $('vvid').src=''; }

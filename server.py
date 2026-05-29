@@ -479,6 +479,9 @@ def gen_image_batch(job_ids: list, prompt: str, resolution: str, ratio: str,
         triples.append((job_id, img_url, b64_bytes))
 
     for job_id, img_url, _ in triples:
+        if not img_url:
+            emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'Laozhang returned no image URL — try again'})
+            continue
         total_cost = log_cost(job_id, 'laozhang', model, 'image', model_name, cost_per)
         emit_to(socket_id, 'job:complete', {
             'job_id': job_id, 'url': img_url, 'cost': total_cost, 'provider': 'laozhang'
@@ -849,17 +852,21 @@ def _kie_image_input(model: str, prompt: str, ratio: str, ref_urls: list | None 
         gr = {'9:16': '2:3', '16:9': '3:2', '3:4': '2:3', '4:3': '3:2', '1:1': '1:1'}.get(ratio, '1:1')
         return {'prompt': prompt, 'aspect_ratio': gr, 'nsfw_checker': False, 'enable_pro': True}
     if model in ('google/imagen4', 'google/imagen4-ultra'):
-        return {'prompt': prompt, 'aspect_ratio': ratio, 'negative_prompt': '', 'seed': ''}
+        return {'prompt': prompt, 'aspect_ratio': ratio}  # omit optional fields — KIE rejects empty strings
     # Default: simple prompt + aspect_ratio (works for gpt-image-2-text-to-image etc.)
     return {'prompt': prompt, 'aspect_ratio': ratio}
 
 
 def _kie_extract_image_url(result: dict) -> str | None:
-    """Extract image URL from KIE result — handles multiple response shapes."""
-    return (result.get('imageUrls', [None])[0]
-            or result.get('resultUrls', [None])[0] if result.get('resultUrls') else None
-            or next((v['url'] for v in result.get('images', []) if v.get('url')), None)
-            or result.get('url'))
+    """Extract image URL from KIE result — handles every known response shape safely."""
+    for key in ('imageUrls', 'resultUrls'):
+        lst = result.get(key) or []
+        if lst and lst[0]:
+            return lst[0]
+    for img in (result.get('images') or []):
+        if img.get('url'):
+            return img['url']
+    return result.get('url') or result.get('imageUrl') or None
 
 
 def gen_image_kie(job_id: str, prompt: str, ratio: str, model_name: str,
