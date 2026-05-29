@@ -621,19 +621,22 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
             if image_url:  # optional start frame (may not be supported — KIE will reject)
                 payload_input['image_url'] = image_url
 
-        # ── kling-2.6 image-to-video ─────────────────────────────────────────
+        # ── kling-2.6 image-to-video (removed from UI — routes to v2-1-pro) ────
         elif kie_model == 'kling-2.6/image-to-video':
+            # This model doesn't exist on KIE — route directly to v2-1-pro with start frame
+            kie_model = 'kling/v2-1-pro'
             if not image_url:
-                log.warning(f"[{job_id}] kling-2.6/image-to-video requires start frame — falling back to t2v")
                 kie_model = 'kling-2.6/text-to-video'
                 payload_input = {'prompt': prompt, 'sound': sound, 'aspect_ratio': ratio, 'duration': dur_str}
             else:
                 payload_input = {
                     'prompt': prompt,
-                    'sound': sound,
+                    'negative_prompt': 'different person, face change, identity change, different face, morphing, distorted face, ugly, blurry',
                     'aspect_ratio': ratio,
                     'duration': dur_str,
+                    'mode': 'std',
                     'image_url': image_url,
+                    'sound': sound,
                 }
 
         # ── kling v2.1 master text-to-video ──────────────────────────────────
@@ -664,7 +667,7 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
             else:
                 payload_input = {
                     'prompt': prompt,
-                    'negative_prompt': '',
+                    'negative_prompt': 'different person, face change, identity change, different face, morphing, distorted face, ugly, blurry',
                     'aspect_ratio': ratio,
                     'duration': dur_str,
                     'mode': mode or 'std',
@@ -675,17 +678,6 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
     headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
 
     video_url, err = _kie_submit_and_poll(job_id, kie_model, payload_input, socket_id, headers)
-
-    # If kling-2.6/image-to-video fails (model may not exist on KIE), retry with v2-1-pro + same image
-    if not video_url and kie_model == 'kling-2.6/image-to-video' and image_url:
-        log.warning(f"[{job_id}] kling-2.6/image-to-video failed ({err}) — retrying with kling/v2-1-pro")
-        emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': '2.6 i2v unavailable — retrying with v2.1 Pro…', 'pct': 15})
-        kie_model = 'kling/v2-1-pro'
-        fallback_input = {
-            'prompt': prompt, 'negative_prompt': '', 'aspect_ratio': ratio,
-            'duration': dur_str, 'mode': 'std', 'image_url': image_url,
-        }
-        video_url, err = _kie_submit_and_poll(job_id, kie_model, fallback_input, socket_id, headers)
 
     if not video_url:
         log.error(f"Video job failed [{job_id}] after retry: {err}")
