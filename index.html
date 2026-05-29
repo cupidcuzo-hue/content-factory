@@ -823,6 +823,11 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
 
 <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
 <script>
+// ── BACKEND URL (works from any origin: Railway, iframe, local file) ──
+const BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? window.location.origin
+  : 'https://content-factory-production-902b.up.railway.app';
+
 // ── SOCKET.IO (defensive — app works even if socket fails to load) ──
 let socket = null;
 const pendingJobs = new Map(); // job_id → {mid, type, prompt, model, cost}
@@ -833,7 +838,7 @@ function initSocket() {
     return;
   }
   try {
-    socket = io();
+    socket = io(BASE_URL, {transports: ['websocket', 'polling']});
 
     socket.on('job:complete', async ({job_id, url, cost, provider}) => {
       const meta = pendingJobs.get(job_id);
@@ -1338,7 +1343,7 @@ function bindAll() {
   $('tapis').addEventListener('click', async () => {
     const el=$('api-status-tr'); el.className='tresult'; el.textContent='Testing…';
     try {
-      const r=await fetch('/api/test/all'); const d=await r.json();
+      const r=await fetch(BASE_URL+'/api/test/all'); const d=await r.json();
       const lz=d.laozhang==='ok'?'✓ Laozhang':'✗ Laozhang';
       const ki=d.kie==='ok'?'✓ KIE':'✗ KIE';
       el.className='tresult '+(d.all_ok?'ok':'err');
@@ -1628,7 +1633,7 @@ function updateCostPreviews() {
 
 async function updateCostDisplay() {
   try {
-    const r = await fetch('/api/costs/summary');
+    const r = await fetch(BASE_URL+'/api/costs/summary');
     if (!r.ok) throw new Error('no backend');
     const d = await r.json();
     $('today-cost').textContent = '~$' + (d.today || 0).toFixed(2);
@@ -1645,7 +1650,7 @@ async function loadCostTracker() {
   const panel = $('cost-tracker');
   panel.style.display = '';
   try {
-    const r = await fetch('/api/costs/summary');
+    const r = await fetch(BASE_URL+'/api/costs/summary');
     if (!r.ok) throw new Error('backend unavailable');
     const d = await r.json();
     $('ct-week-img').textContent  = `Images: ${d.week_images.count} → $${d.week_images.cost.toFixed(2)}`;
@@ -1849,7 +1854,7 @@ async function genMc(mid) {
   const m = MODELS.find(x=>x.id===mid);
   pendingJobs.set(cid, {mid, type:'video', prompt:'Motion Control', model, cost, ratio:'9:16', syncAudio, refVideoFile: mcVideoFile});
 
-  fetch('/api/generate/video', {method:'POST', headers:{'Content-Type':'application/json'},
+  fetch(BASE_URL+'/api/generate/video', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
       job_id: cid,
       prompt: 'Motion Control',
@@ -1893,7 +1898,7 @@ async function genSd(mid) {
     pendingJobs.set(cid,{mid,type:'image',prompt,model,cost,ratio});
   }
   const res = (imageProvider === 'laozhang' && $('sd-q').value === 'high') ? '4K' : '2K';
-  fetch('/api/generate/image/batch',{method:'POST',headers:{'Content-Type':'application/json'},
+  fetch(BASE_URL+'/api/generate/image/batch',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({job_ids,prompt,provider:imageProvider,model,resolution:res,ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
   }).catch(e=>{ job_ids.forEach(cid=>{pendingJobs.delete(cid);failCard(cid,e.message||'Submit failed');}); });
   btn.disabled=false; btn.textContent='Generate';
@@ -1932,7 +1937,7 @@ async function genVi(mid) {
   for(let i=0;i<cnt;i++){
     const cid=uid(); addPend(cid,mid,'video',prompt,'Video '+(i+1)+'/'+cnt,ratio);
     pendingJobs.set(cid,{mid,type:'video',prompt,model,cost,ratio});
-    fetch('/api/generate/video',{method:'POST',headers:{'Content-Type':'application/json'},
+    fetch(BASE_URL+'/api/generate/video',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({job_id:cid,prompt,model,provider:videoProvider,duration:dur,ratio,image_url:startFrameUrl,mode:isKling3?viMode:null,model_name:m?.name||mid,socket_id:socket?.id||''})
     }).catch(e=>{ pendingJobs.delete(cid); failCard(cid,e.message||'Submit failed'); });
   }
@@ -2240,7 +2245,7 @@ function updateApiDot(state) {
   else if(state==='err'){dot.className='err';txt.textContent='Backend offline';}
   else{
     // On init, check backend health
-    fetch('/api/test/all').then(r=>r.json()).then(d=>{
+    fetch(BASE_URL+'/api/test/all').then(r=>r.json()).then(d=>{
       dot.className=d.all_ok?'ok':'err';
       txt.textContent=d.all_ok?'Backend connected':'Backend error';
     }).catch(()=>{dot.className='err';txt.textContent='Backend offline';});
