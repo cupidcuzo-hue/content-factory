@@ -425,9 +425,19 @@ def gen_image_batch(job_ids: list, prompt: str, resolution: str, ratio: str,
         body = ''
         try:
             if hasattr(e, 'response') and e.response is not None:
-                body = e.response.text[:300]
+                body = e.response.text[:500]
         except Exception:
             pass
+        # Detect content policy — don't retry KIE with same content, show clear message
+        content_policy = 'usage guidelines' in body.lower() or 'content' in body.lower() and 'policy' in body.lower()
+        if content_policy:
+            log.warning(f"Laozhang content policy [{job_ids[0]}] — failing fast: {body[:200]}")
+            for jid in job_ids:
+                emit_to(socket_id, 'job:failed', {
+                    'job_id': jid,
+                    'error': 'Content policy: Laozhang rejected this image/prompt. Try switching to KIE provider or use a different prompt.'
+                })
+            return
         log.warning(f"Laozhang batch failed, falling back to KIE per-image: {e} | {body[:100]}")
         # Auto-fallback: fire one KIE job per image, pass ref photos through
         for jid in job_ids:
