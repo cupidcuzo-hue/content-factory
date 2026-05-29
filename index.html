@@ -856,7 +856,7 @@ function initSocket() {
         } catch { finalUrl = url; }
       }
 
-      succCard(job_id, meta.mid, meta.type, finalUrl, meta.prompt, meta.model, cost);
+      succCard(job_id, meta.mid, meta.type, finalUrl, meta.prompt, meta.model, cost, meta.sound);
       saveHist({id:job_id, modelId:meta.mid, type:meta.type, prompt:meta.prompt, url:finalUrl, model:meta.model, ratio:meta.ratio||'9:16', timestamp:Date.now(), estimatedCost:cost});
       updateCostDisplay();
     });
@@ -1964,8 +1964,8 @@ async function genVi(mid) {
   const m=MODELS.find(x=>x.id===mid);
   for(let i=0;i<cnt;i++){
     const cid=uid(); addPend(cid,mid,'video',prompt,'Video '+(i+1)+'/'+cnt,ratio);
-    pendingJobs.set(cid,{mid,type:'video',prompt,model,cost,ratio});
     const sound = $('vi-sound') ? $('vi-sound').checked : false;
+    pendingJobs.set(cid,{mid,type:'video',prompt,model,cost,ratio,sound});
     fetch(BASE_URL+'/api/generate/video',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({job_id:cid,prompt,model,provider:videoProvider,duration:dur,ratio,image_url:startFrameUrl,mode:isKling3?viMode:null,sound,model_name:m?.name||mid,socket_id:socket?.id||''})
     }).catch(e=>{ pendingJobs.delete(cid); failCard(cid,e.message||'Submit failed'); });
@@ -2061,7 +2061,7 @@ function addPend(cid, mid, type, prompt, label, ratio) {
   }, limitMs);
 }
 
-function succCard(cid, mid, type, url, prompt, model, cost) {
+function succCard(cid, mid, type, url, prompt, model, cost, sound) {
   const item=items.find(x=>x.id===cid); if(item){item.status='success';item.url=url;item.cost=cost;}
   const card=$('c-'+cid); if(!card) return;
   const m2=MODELS.find(x=>x.id===mid);
@@ -2072,9 +2072,12 @@ function succCard(cid, mid, type, url, prompt, model, cost) {
   const isVid=type==='video';
   const m=MODELS.find(x=>x.id===mid);
   const displayUrl = url.startsWith('/') ? BASE_URL + url : url;
-  const media=isVid?`<video src="${displayUrl}" loop muted playsinline preload="metadata"></video>`:`<img src="${displayUrl}" loading="lazy" alt="">`;
+  // Videos with sound: show controls so user can unmute/play. Videos without: autoplay muted on hover.
+  const vidAttrs = sound ? `src="${displayUrl}" loop playsinline controls` : `src="${displayUrl}" loop muted playsinline preload="metadata"`;
+  const media=isVid?`<video ${vidAttrs}></video>`:`<img src="${displayUrl}" loading="lazy" alt="">`;
   card.innerHTML=`${media}<div class="cbadge" style="color:${m.color}">${m.name}</div><div class="ctype">${isVid?'Video':'Image'}</div><div class="covlay"><div class="covprompt">${esc(prompt)}</div><div class="covact"><button class="covbtn" onclick="dlUrl('${url}','${cid}')">Download</button><button class="covbtn" onclick="cpUrl('${url}')">Copy URL</button><span class="covcost">~${f$(cost)}</span></div></div>`;
-  if(isVid){const v=card.querySelector('video');v.play().catch(()=>{}); card.addEventListener('mouseenter',()=>v.play());card.addEventListener('mouseleave',()=>{v.pause();v.currentTime=0;});}
+  if(isVid && !sound){const v=card.querySelector('video');v.play().catch(()=>{}); card.addEventListener('mouseenter',()=>v.play());card.addEventListener('mouseleave',()=>{v.pause();v.currentTime=0;});}
+  if(isVid && sound){const v=card.querySelector('video');v.play().catch(()=>{});} // try autoplay, user can unmute with controls
   updateBadge();
 }
 
