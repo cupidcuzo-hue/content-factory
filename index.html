@@ -1046,16 +1046,17 @@ function updateKieModeRow() {
   const m = $('vi-m') ? $('vi-m').value : '';
   const showMode = KIE_I2V_MODELS.has(m) || m === '__c'; // show for i2v or custom
   if ($('vi-mode-row')) $('vi-mode-row').style.display = (videoProvider === 'kie' && showMode) ? '' : 'none';
-  // Duration: ALL kling models only accept 5s or 10s — restrict dropdown
+  // Duration: kling = 5s/10s only; Laozhang/non-kling = full 5–15s
   const dur = $('vi-d');
   if(!dur) return;
-  const fiveAndTen = m.startsWith('kling') || m.includes('kling');
+  // Laozhang wan2.1 supports up to 15s — never restrict for Laozhang provider
+  const fiveAndTen = videoProvider === 'kie' && (m.startsWith('kling') || m.includes('kling'));
   const cur = dur.value;
   if(fiveAndTen){
     dur.innerHTML='<option value="5">5s</option><option value="10">10s</option>';
     dur.value = ['5','10'].includes(cur) ? cur : '5';
   } else {
-    // Full 5-15s range for non-kling / custom
+    // Full 5-15s range for Laozhang or non-kling KIE models
     if(dur.options.length < 5){
       let html='';
       for(let i=5;i<=15;i++) html+=`<option value="${i}">${i}s</option>`;

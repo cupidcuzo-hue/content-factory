@@ -644,6 +644,7 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
                 'aspect_ratio': ratio,
                 'negative_prompt': 'blur, distort, and low quality',
                 'cfg_scale': 0.5,
+                'sound': sound,
             }
             if image_url:
                 payload_input['image_url'] = image_url
@@ -668,6 +669,7 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
                     'duration': dur_str,
                     'mode': mode or 'std',
                     'image_url': image_url,
+                    'sound': sound,
                 }
 
     headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
