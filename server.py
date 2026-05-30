@@ -630,14 +630,26 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
 
         # ── kling-2.6 text-to-video ──────────────────────────────────────────
         elif kie_model == 'kling-2.6/text-to-video':
-            payload_input = {
-                'prompt': prompt,
-                'sound': sound,
-                'aspect_ratio': ratio,
-                'duration': dur_str,
-            }
-            if image_url:  # optional start frame
-                payload_input['image_url'] = image_url
+            if image_url:
+                # When a ref/start-frame is provided, route to v2-1-pro i2v
+                # (KIE's kling-2.6/text-to-video ignores image_url — i2v needs a dedicated model)
+                kie_model = 'kling/v2-1-pro'
+                payload_input = {
+                    'prompt': prompt,
+                    'negative_prompt': 'different person, face change, identity change, different face, morphing, distorted face, ugly, blurry',
+                    'aspect_ratio': ratio,
+                    'duration': dur_str,
+                    'mode': mode or 'std',
+                    'image_url': image_url,
+                    'sound': sound,
+                }
+            else:
+                payload_input = {
+                    'prompt': prompt,
+                    'sound': sound,
+                    'aspect_ratio': ratio,
+                    'duration': dur_str,
+                }
 
         # ── Seedance 2.0 — text-to-video only, no image input ───────────────
         elif kie_model == 'bytedance/seedance-2':
@@ -680,7 +692,6 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
                 payload_input['image_url'] = image_url
 
         # ── kling v2.1 i2v: standard / pro / master ──────────────────────────
-        # Note: sound param NOT sent to i2v models — KIE generates garbled AI audio for them
         else:
             if not image_url:
                 log.warning(f"[{job_id}] {kie_model} is image-to-video but no start frame supplied "
@@ -700,7 +711,7 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
                     'duration': dur_str,
                     'mode': mode or 'std',
                     'image_url': image_url,
-                    # sound intentionally omitted — v2.1 i2v generates alien/garbled AI audio
+                    'sound': sound,
                 }
 
     headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
