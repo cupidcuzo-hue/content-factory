@@ -639,16 +639,14 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
             if image_url:  # optional start frame
                 payload_input['image_url'] = image_url
 
-        # ── Seedance 2.0 ─────────────────────────────────────────────────────
+        # ── Seedance 2.0 — text-to-video only, no image input ───────────────
         elif kie_model == 'bytedance/seedance-2':
             payload_input = {
                 'prompt': prompt,
                 'resolution': '720p',
                 'aspect_ratio': ratio,
-                'duration': int(duration or 5),
+                'duration': int(dur_str),
             }
-            if image_url:
-                payload_input['image_url'] = image_url
 
         # ── kling-2.6 image-to-video (removed from UI — routes to v2-1-pro) ────
         elif kie_model == 'kling-2.6/image-to-video':
@@ -682,6 +680,7 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
                 payload_input['image_url'] = image_url
 
         # ── kling v2.1 i2v: standard / pro / master ──────────────────────────
+        # Note: sound param NOT sent to i2v models — KIE generates garbled AI audio for them
         else:
             if not image_url:
                 log.warning(f"[{job_id}] {kie_model} is image-to-video but no start frame supplied "
@@ -701,7 +700,7 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
                     'duration': dur_str,
                     'mode': mode or 'std',
                     'image_url': image_url,
-                    'sound': sound,
+                    # sound intentionally omitted — v2.1 i2v generates alien/garbled AI audio
                 }
 
     headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
