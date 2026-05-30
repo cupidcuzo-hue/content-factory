@@ -122,19 +122,22 @@ LAOZHANG_COSTS = {'1K': 0.0125, '2K': 0.025, '4K': 0.050}
 
 # Per-model cost overrides for Laozhang (for models that aren't resolution-priced)
 LAOZHANG_MODEL_COSTS = {
-    'gpt-image-1':             0.040,
-    'gpt-image-2':             0.040,
-    'gpt-image-2-all':         0.040,
-    'gpt-image-2-vip':         0.060,
-    'gemini-2.5-flash-image':  0.020,
-    'gemini-3-pro-image-preview': 0.060,
+    'gpt-image-1':                  0.040,
+    'gpt-image-1.5':                0.040,   # newer, higher quality gpt-image-1
+    'gpt-image-2':                  0.040,
+    'gpt-image-2-all':              0.040,
+    'gpt-image-2-vip':              0.060,
+    'gemini-2.5-flash-image':       0.020,
+    'gemini-3-pro-image-preview':   0.060,
     'gemini-3.1-flash-image-preview': 0.025,
-    'dall-e-3':                0.080,
-    'grok-2-aurora':           0.070,
-    'imagen-3.0-generate-002': 0.050,
-    'flux-1.1-pro':            0.050,
-    'flux-1-dev':              0.030,
-    'flux-1-schnell':          0.010,
+    'dall-e-3':                     0.080,
+    'grok-2-aurora':                0.070,
+    'imagen-3.0-generate-002':      0.050,
+    'flux-1.1-pro':                 0.050,
+    'flux-1-dev':                   0.030,
+    'flux-1-schnell':               0.010,
+    'flux-kontext-pro':             0.035,   # Flux Kontext — uses aspect_ratio not size
+    'flux-kontext-max':             0.070,   # Flux Kontext Max — highest quality
 }
 
 KIE_IMAGE_COSTS = {
@@ -175,6 +178,18 @@ LAOZHANG_VIDEO_COSTS = {
     'kling/v2-1-pro':           0.250,
     'kling/v2-1-standard':      0.125,
     'kling/v2-1-master':        0.800,
+    # Sora 2 via Laozhang async /v1/videos endpoint
+    'sora-2':                   0.150,
+    'sora-2-pro':               0.800,
+}
+
+# Sora 2 size mapping (portrait/landscape)
+SORA2_SIZE_MAP = {
+    '9:16': '720x1280',
+    '16:9': '1280x720',
+    '1:1':  '720x720',
+    '3:4':  '720x960',
+    '4:3':  '960x720',
 }
 
 LAOZHANG_VIDEO_SIZE_MAP = {
@@ -212,11 +227,12 @@ GPTI2_SIZE_MAP = {
 }
 
 # Models that need special parameter handling
-DALLE3_MODELS   = {'dall-e-3'}
-GPTI1_MODELS    = {'gpt-image-1'}
-GPTI2_MODELS    = {'gpt-image-2', 'gpt-image-2-all', 'gpt-image-2-vip',
-                   'gemini-2.5-flash-image', 'gemini-3-pro-image-preview',
-                   'gemini-3.1-flash-image-preview'}
+DALLE3_MODELS        = {'dall-e-3'}
+GPTI1_MODELS         = {'gpt-image-1', 'gpt-image-1.5'}   # same size constraints
+GPTI2_MODELS         = {'gpt-image-2', 'gpt-image-2-all', 'gpt-image-2-vip',
+                        'gemini-2.5-flash-image', 'gemini-3-pro-image-preview',
+                        'gemini-3.1-flash-image-preview'}
+FLUX_KONTEXT_MODELS  = {'flux-kontext-pro', 'flux-kontext-max'}  # use aspect_ratio not size
 
 def _lz_payload(model: str, prompt: str, ratio: str, resolution: str, ref_urls: list, n: int = 1) -> dict:
     """Build correct Laozhang payload for any model — handles size/quality differences."""
@@ -229,10 +245,15 @@ def _lz_payload(model: str, prompt: str, ratio: str, resolution: str, ref_urls: 
     elif model in GPTI2_MODELS:
         size = GPTI2_SIZE_MAP.get(ratio, '1024x1792')
         p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'high'}
+    elif model in FLUX_KONTEXT_MODELS:
+        # Flux Kontext uses aspect_ratio via extra_body instead of size (per Laozhang docs)
+        p = {'model': model, 'prompt': prompt, 'n': n,
+             'extra_body': {'aspect_ratio': ratio, 'output_format': 'jpeg'}}
     else:
         size = IMG_SIZE_MAP.get((ratio, resolution), '1024x1820')
         p = {'model': model, 'prompt': prompt, 'n': n, 'size': size, 'quality': 'hd'}
-    if ref_urls and model not in DALLE3_MODELS and model not in GPTI1_MODELS and model not in GPTI2_MODELS:
+    # Reference images (not supported by Dalle3, GPT-Image-1/1.5, or Flux Kontext)
+    if ref_urls and model not in DALLE3_MODELS and model not in GPTI1_MODELS and model not in FLUX_KONTEXT_MODELS:
         p['image_input'] = ref_urls
     return p
 
@@ -903,6 +924,74 @@ def gen_video_laozhang(job_id: str, prompt: str, model: str, duration: str,
         threading.Thread(target=_bg_upload, daemon=True).start()
 
 
+# ── Sora 2 video via Laozhang async /v1/videos endpoint ──────────────────────
+
+def gen_video_sora2(job_id: str, prompt: str, model: str, duration: str,
+                    ratio: str, model_name: str, socket_id: str):
+    """Generate video via Laozhang's async /v1/videos endpoint (Sora 2).
+    No charge on failure — safe to call without worry.
+    """
+    cost_per = LAOZHANG_VIDEO_COSTS.get(model, 0.15)
+    size = SORA2_SIZE_MAP.get(ratio, '720x1280')
+    # Sora 2 supports 10s or 15s
+    seconds = '15' if int(duration or 10) >= 13 else '10'
+    headers = {'Authorization': f'Bearer {LAOZHANG_API_KEY}', 'Content-Type': 'application/json'}
+
+    emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Submitting to Sora 2…', 'pct': 5})
+    try:
+        r = requests.post(
+            'https://api.laozhang.ai/v1/videos',
+            headers=headers,
+            json={'model': model, 'prompt': prompt, 'size': size, 'seconds': seconds},
+            timeout=60,
+        )
+        r.raise_for_status()
+        task = r.json()
+        task_id = task.get('id')
+        if not task_id:
+            raise ValueError(f'No task id in response: {task}')
+        log.info(f"Sora2 task submitted [{job_id}] taskId={task_id}")
+    except Exception as e:
+        log.error(f"Sora2 submit failed [{job_id}]: {e}")
+        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'Sora 2 submit failed: {e}'})
+        return
+
+    # Poll for completion (up to 12 min, every 8s)
+    video_url = None
+    for poll_num in range(90):
+        time.sleep(8)
+        pct = min(10 + poll_num, 90)
+        emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': f'Sora 2 generating… ({poll_num*8}s)', 'pct': pct})
+        try:
+            r = requests.get(
+                f'https://api.laozhang.ai/v1/videos/{task_id}',
+                headers=headers, timeout=30,
+            )
+            r.raise_for_status()
+            data = r.json()
+            status = data.get('status', '')
+            log.info(f"Sora2 poll [{job_id}] #{poll_num} status={status}")
+            if status == 'completed':
+                video_url = data.get('url') or data.get('video_url') or (data.get('data') or {}).get('url')
+                if video_url:
+                    break
+            elif status == 'failed':
+                err = data.get('error') or data.get('message') or 'Sora 2 generation failed'
+                emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': err})
+                return
+        except Exception as e:
+            log.warning(f"Sora2 poll error [{job_id}] #{poll_num}: {e}")
+
+    if not video_url:
+        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'Sora 2 timed out after 12 min'})
+        return
+
+    total_cost = log_cost(job_id, 'laozhang', model, 'video', model_name, cost_per)
+    emit_to(socket_id, 'job:complete', {'job_id': job_id, 'url': video_url, 'cost': total_cost, 'provider': 'laozhang'})
+    emit_to(socket_id, 'cost:update', {'today_total': today_total()})
+    log.info(f"Sora2 video complete [{job_id}] cost=${total_cost:.4f}")
+
+
 # ── Image generation via KIE.ai ──────────────────────────────────────────────
 
 # Models that need extra fields in their input (beyond just prompt + aspect_ratio)
@@ -1075,16 +1164,29 @@ def api_gen_video():
     provider = d.get('provider', 'kie')
 
     if provider == 'laozhang':
-        t = threading.Thread(target=gen_video_laozhang, daemon=True, kwargs=dict(
-            job_id=d['job_id'],
-            prompt=d.get('prompt', ''),
-            model=d.get('model', 'wan2.1-14b-720p'),
-            duration=str(d.get('duration', '5')),
-            ratio=d.get('ratio', '9:16'),
-            image_url=d.get('image_url'),
-            model_name=d.get('model_name', 'unknown'),
-            socket_id=d.get('socket_id', ''),
-        ))
+        model_lz = d.get('model', 'wan2.1-14b-720p')
+        if model_lz in ('sora-2', 'sora-2-pro'):
+            # Sora 2 uses separate async /v1/videos endpoint
+            t = threading.Thread(target=gen_video_sora2, daemon=True, kwargs=dict(
+                job_id=d['job_id'],
+                prompt=d.get('prompt', ''),
+                model=model_lz,
+                duration=str(d.get('duration', '10')),
+                ratio=d.get('ratio', '9:16'),
+                model_name=d.get('model_name', 'unknown'),
+                socket_id=d.get('socket_id', ''),
+            ))
+        else:
+            t = threading.Thread(target=gen_video_laozhang, daemon=True, kwargs=dict(
+                job_id=d['job_id'],
+                prompt=d.get('prompt', ''),
+                model=model_lz,
+                duration=str(d.get('duration', '5')),
+                ratio=d.get('ratio', '9:16'),
+                image_url=d.get('image_url'),
+                model_name=d.get('model_name', 'unknown'),
+                socket_id=d.get('socket_id', ''),
+            ))
     else:
         t = threading.Thread(target=gen_video, daemon=True, kwargs=dict(
             job_id=d['job_id'],
