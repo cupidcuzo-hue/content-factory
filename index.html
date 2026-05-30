@@ -857,7 +857,7 @@ function initSocket() {
       }
 
       succCard(job_id, meta.mid, meta.type, finalUrl, meta.prompt, meta.model, cost, meta.sound);
-      saveHist({id:job_id, modelId:meta.mid, type:meta.type, prompt:meta.prompt, url:finalUrl, model:meta.model, ratio:meta.ratio||'9:16', timestamp:Date.now(), estimatedCost:cost});
+      saveHist({id:job_id, modelId:meta.mid, type:meta.type, prompt:meta.prompt, url:finalUrl, model:meta.model, ratio:meta.ratio||'9:16', timestamp:Date.now(), estimatedCost:cost, sound:meta.sound||false});
       updateCostDisplay();
     });
 
@@ -944,8 +944,6 @@ const COSTS = {
   'seedream/4.5-text-to-image':          0.050,
   'bytedance/seedream-v4-text-to-image': 0.040,
   'bytedance/seedream':                  0.020,
-  // ── NanoBanana via Laozhang ──
-  'nano-banana-pro':                     0.080,
   // ── Grok via Laozhang ──
   'grok-2-aurora':                       0.070,
   // ── Google via Laozhang ──
@@ -994,7 +992,6 @@ let activeTab = 'images';
 let multiMode = false;
 let selectedModels = new Set(['kim']);
 let items = [];
-let corsShown = false;
 let hModelFil = 'all', hTypeFil = 'all';
 let imageProvider = 'kie'; // 'laozhang' | 'kie' — KIE default (Laozhang needs top-up)
 let videoProvider = 'kie';      // 'laozhang' | 'kie' — KIE is default for video
@@ -1045,7 +1042,7 @@ function _updateRefNote() {
 const KIE_I2V_MODELS = new Set(['kling/v2-1-standard','kling/v2-1-pro','kling/v2-1-master']);
 function updateKieModeRow() {
   const m = $('vi-m') ? $('vi-m').value : '';
-  const showMode = KIE_I2V_MODELS.has(m) || m === '__c'; // show for i2v or custom
+  const showMode = KIE_I2V_MODELS.has(m) || m === 'kling-3.0/video' || m === 'kling/v2-1-master-text-to-video' || m === '__c';
   if ($('vi-mode-row')) $('vi-mode-row').style.display = (videoProvider === 'kie' && showMode) ? '' : 'none';
   // Duration: kling = 5s/10s only; Laozhang/non-kling = full 5–15s
   const dur = $('vi-d');
@@ -1055,9 +1052,11 @@ function updateKieModeRow() {
     m === 'kling-2.6/text-to-video' || m === 'kling-2.6/image-to-video' ||
     m.startsWith('kling/v2-1') || m === 'kling/v2-1-master-text-to-video'
   );
-  const isKling3 = videoProvider === 'kie' && m === 'kling-3.0/video';
+  const isKling3   = videoProvider === 'kie' && m === 'kling-3.0/video';
+  const isSeedance = videoProvider === 'kie' && m === 'bytedance/seedance-2';
   const cur = dur.value;
   if(isKling26orV21){
+    // 5s or 10s only
     dur.innerHTML='<option value="5">5s</option><option value="10">10s</option>';
     dur.value = ['5','10'].includes(cur) ? cur : '5';
   } else if(isKling3){
@@ -1068,8 +1067,16 @@ function updateKieModeRow() {
       dur.innerHTML=html;
       dur.value=(parseInt(cur)>=3&&parseInt(cur)<=15)?cur:'5';
     }
+  } else if(isSeedance){
+    // Seedance 2.0 supports 5–10s
+    if(dur.options.length !== 6){
+      let html='';
+      for(let i=5;i<=10;i++) html+=`<option value="${i}">${i}s</option>`;
+      dur.innerHTML=html;
+      dur.value=(parseInt(cur)>=5&&parseInt(cur)<=10)?cur:'5';
+    }
   } else {
-    // Full 5-15s range for Laozhang, Seedance, non-kling KIE models
+    // Full 5-15s range for Laozhang, non-kling KIE models
     if(dur.options.length < 11){
       let html='';
       for(let i=5;i<=15;i++) html+=`<option value="${i}">${i}s</option>`;
@@ -1099,13 +1106,11 @@ function setVideoProvider(p) {
   updateCostPreviews();
 }
 
-const KIE = 'https://api.kie.ai/api/v1/jobs';
 const $ = id => document.getElementById(id);
 const delay = ms => new Promise(r => setTimeout(r, ms));
 const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
 const f$ = n => '$' + n.toFixed(2);
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-const getKie = () => localStorage.getItem('cuzo_kie_key') || '';
 const getCldCloud  = () => localStorage.getItem('cuzo_cld_cloud') || '';
 const getCldPreset = () => localStorage.getItem('cuzo_cld_preset') || '';
 const getCldReady  = () => !!(getCldCloud() && getCldPreset());
@@ -1437,54 +1442,6 @@ function toggleMulti() {
     document.querySelectorAll('.model-chip').forEach(c => c.classList.toggle('msel', c.dataset.id===activeModel));
   } else { selectedModels.clear(); }
   updateMultiBtns();
-}
-
-// ── KIE API ──
-async function kieCreate(model, input) {
-  const key = getKie();
-  const r = await fetch(KIE+'/createTask', {
-    method:'POST',
-    headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
-    body:JSON.stringify({model,input})
-  });
-  const d = await r.json();
-  if(d.code!==200) throw new Error(d.msg||'KIE error '+r.status);
-  return d.data.taskId;
-}
-
-async function kiePoll(taskId) {
-  const r = await fetch(KIE+'/recordInfo?taskId='+encodeURIComponent(taskId), {
-    headers:{'Authorization':'Bearer '+getKie()}
-  });
-  const d = await r.json();
-  if(d.data?.resultJson && typeof d.data.resultJson==='string') {
-    try { d.data.result = JSON.parse(d.data.resultJson); } catch(_){}
-  }
-  return d;
-}
-
-async function pollLoop(taskId, onOk, onFail, maxP=110) {
-  for(let i=0;i<maxP;i++) {
-    await delay(8000);
-    try {
-      const d = await kiePoll(taskId);
-      const st = d.data?.state;
-      if(st==='success') {
-        const res = d.data?.result || {};
-        const urls = res.resultUrls || res.videos?.map(v=>v.url) || (res.url?[res.url]:[]);
-        if(urls&&urls[0]){onOk(urls);return;}
-      }
-      if(st==='fail'){onFail('Generation failed');return;}
-    } catch(e) {
-      if(e.name==='TypeError'||(e.message&&e.message.includes('Failed to fetch'))){showCors();onFail('CORS error — see banner');return;}
-    }
-  }
-  onFail('Timed out (~15 min)');
-}
-
-function showCors() {
-  if(corsShown) return; corsShown=true;
-  $('cors-banner').classList.add('show');
 }
 
 // ── FFMPEG AUDIO MERGE ──
@@ -1834,7 +1791,12 @@ function handleMcVideoUpload(e) {
 }
 
 async function genMc(mid) {
-  if(!mcImageB64){alert('Upload a subject image first.');return;}
+  // Auto-inject model ref photo as subject image if none manually uploaded
+  if(!mcImageB64){
+    const refs = getRefs(mid);
+    if(refs.length > 0){ mcImageB64 = refs[0]; }
+  }
+  if(!mcImageB64){alert('Upload a subject image first (or add ref photos in Identity panel).');return;}
   if(!mcVideoFile){alert('Upload a motion reference video first.');return;}
   if(!getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings.');return;}
 
@@ -1910,7 +1872,8 @@ async function genMc(mid) {
 }
 
 async function genSd(mid) {
-  const prompt=withIdentity($('sd-p').value.trim(), mid); if(!prompt){alert('Enter a prompt.');return;}
+  const rawPrompt=$('sd-p').value.trim(); if(!rawPrompt){alert('Enter a prompt.');return;}
+  const apiPrompt=withIdentity(rawPrompt, mid);
   const model=$('sd-m').value==='__c'?($('sd-mc').value.trim()||'seedream/4.5-text-to-image'):$('sd-m').value;
   const cnt=parseInt($('sd-c').value), ratio=$('sd-r').value;
   const cost=getCost(model);
@@ -1927,25 +1890,25 @@ async function genSd(mid) {
       refUrls=await getRefUrls(mid);
     } catch(e){alert('Ref upload failed: '+e.message);btn.disabled=false;btn.textContent='Generate';return;}
   }
-  // If refs exist but model doesn't support them — skip silently (user already sees ✗ in UI note)
 
   btn.innerHTML='<div class="spinner"></div>Submitting…';
   const m=MODELS.find(x=>x.id===mid);
   const job_ids=[];
   for(let i=0;i<cnt;i++){
     const cid=uid(); job_ids.push(cid);
-    addPend(cid,mid,'image',prompt,'Image '+(i+1)+'/'+cnt,ratio);
-    pendingJobs.set(cid,{mid,type:'image',prompt,model,cost,ratio});
+    addPend(cid,mid,'image',rawPrompt,'Image '+(i+1)+'/'+cnt,ratio);
+    pendingJobs.set(cid,{mid,type:'image',prompt:rawPrompt,model,cost,ratio});
   }
   const res = (imageProvider === 'laozhang' && $('sd-q').value === 'high') ? '4K' : '2K';
   fetch(BASE_URL+'/api/generate/image/batch',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({job_ids,prompt,provider:imageProvider,model,resolution:res,ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
+    body:JSON.stringify({job_ids,prompt:apiPrompt,provider:imageProvider,model,resolution:res,ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
   }).catch(e=>{ job_ids.forEach(cid=>{pendingJobs.delete(cid);failCard(cid,e.message||'Submit failed');}); });
   btn.disabled=false; btn.textContent='Generate';
 }
 
 async function genVi(mid) {
-  const prompt=withIdentity($('vi-p').value.trim(), mid); if(!prompt){alert('Enter a prompt.');return;}
+  const rawPrompt=$('vi-p').value.trim(); if(!rawPrompt){alert('Enter a prompt.');return;}
+  const apiPrompt=withIdentity(rawPrompt, mid);
   // Pick model from the active provider's dropdown
   const model = videoProvider === 'laozhang'
     ? ($('lz-vid-m').value || 'wan2.1-14b-720p')
@@ -1986,15 +1949,16 @@ async function genVi(mid) {
   // mode param: needed for kling/v2-1 i2v models AND kling-3.0/video (std/pro/4K quality)
   const sendMode = model.startsWith('kling/v2-1') || model === 'kling-3.0/video';
   const viMode = $('vi-mode') ? $('vi-mode').value : 'std';
+  const multiShot = $('vi-multishot') ? $('vi-multishot').checked : false;
 
   btn.innerHTML='<div class="spinner"></div>Submitting…';
   const m=MODELS.find(x=>x.id===mid);
   for(let i=0;i<cnt;i++){
-    const cid=uid(); addPend(cid,mid,'video',prompt,'Video '+(i+1)+'/'+cnt,ratio);
+    const cid=uid(); addPend(cid,mid,'video',rawPrompt,'Video '+(i+1)+'/'+cnt,ratio);
     const sound = $('vi-sound') ? $('vi-sound').checked : false;
-    pendingJobs.set(cid,{mid,type:'video',prompt,model,cost,ratio,sound});
+    pendingJobs.set(cid,{mid,type:'video',prompt:rawPrompt,model,cost,ratio,sound});
     fetch(BASE_URL+'/api/generate/video',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({job_id:cid,prompt,model,provider:videoProvider,duration:dur,ratio,image_url:startFrameUrl,mode:sendMode?viMode:null,sound,model_name:m?.name||mid,socket_id:socket?.id||''})
+      body:JSON.stringify({job_id:cid,prompt:apiPrompt,model,provider:videoProvider,duration:dur,ratio,image_url:startFrameUrl,mode:sendMode?viMode:null,sound,multi_shots:multiShot,model_name:m?.name||mid,socket_id:socket?.id||''})
     }).catch(e=>{ pendingJobs.delete(cid); failCard(cid,e.message||'Submit failed'); });
   }
   btn.disabled=false; btn.textContent='Generate';
@@ -2028,11 +1992,12 @@ function restoreFromHistory() {
     const card=document.createElement('div');
     card.className='gcard'+ratCls(ratio); card.id='c-'+h.id;
     const safeUrl=(h.url||'').replace(/'/g,"\\'");
-    const media=isVid
-      ?`<video src="${h.url.startsWith('/')?BASE_URL+h.url:h.url}" loop muted playsinline preload="metadata"></video>`
-      :`<img src="${h.url.startsWith('/')?BASE_URL+h.url:h.url}" loading="lazy" alt="">`;
+    const hUrl=h.url.startsWith('/')?BASE_URL+h.url:h.url;
+    const vidAttrs=h.sound?`src="${hUrl}" loop playsinline controls`:`src="${hUrl}" loop muted playsinline preload="metadata"`;
+    const media=isVid?`<video ${vidAttrs}></video>`:`<img src="${hUrl}" loading="lazy" alt="">`;
     card.innerHTML=`${media}<div class="cbadge" style="color:${m.color}">${esc(m.name)}</div><div class="ctype">${isVid?'Video':'Image'}</div><div class="covlay"><div class="covprompt">${esc(h.prompt||'')}</div><div class="covact"><button class="covbtn" onclick="dlUrl('${safeUrl}','${h.id}')">Download</button><button class="covbtn" onclick="cpUrl('${safeUrl}')">Copy URL</button><span class="covcost">~${f$(h.estimatedCost||0)}</span></div></div>`;
-    if(isVid){const v=card.querySelector('video');card.addEventListener('mouseenter',()=>v.play());card.addEventListener('mouseleave',()=>{v.pause();v.currentTime=0;});}
+    if(isVid && !h.sound){const v=card.querySelector('video');v.play().catch(()=>{});card.addEventListener('mouseenter',()=>v.play());card.addEventListener('mouseleave',()=>{v.pause();v.currentTime=0;});}
+    if(isVid && h.sound){const v=card.querySelector('video');v.play().catch(()=>{});}
     const target=getTarget(h.modelId);
     target.insertBefore(card,target.firstChild);
   });
@@ -2077,9 +2042,9 @@ function addPend(cid, mid, type, prompt, label, ratio) {
   const t=getTarget(mid); t.insertBefore(card,t.firstChild);
   card.scrollIntoView({behavior:'smooth',block:'nearest'});
   updateBadge();
-  // Auto-cancel if API never responds — images 3 min, videos 5 min
-  const limitMs = type==='video' ? 5*60*1000 : 3*60*1000;
-  const limitLabel = type==='video' ? '5 min' : '3 min';
+  // Auto-cancel if API never responds — images 6 min, videos 12 min (KIE can take 10 min+)
+  const limitMs = type==='video' ? 12*60*1000 : 6*60*1000;
+  const limitLabel = type==='video' ? '12 min' : '6 min';
   setTimeout(() => {
     if (pendingJobs.has(cid)) {
       pendingJobs.delete(cid);
@@ -2119,15 +2084,34 @@ function failCard(cid, msg) {
 function retryJob(cid) {
   const item = items.find(x=>x.id===cid);
   if(!item) return;
-  // Pre-fill prompt and trigger generation on the right tab
   const mid = item.mid;
-  if(item.type==='video'){
-    $('vi-p').value = item.prompt||'';
-    setActiveTab(mid, 'video');
-  } else {
-    $('sd-p').value = item.prompt||'';
-    setActiveTab(mid, 'image');
+
+  // Switch to the model that generated this job
+  if(mid && MODELS.find(x=>x.id===mid)) {
+    activeModel = mid;
+    document.querySelectorAll('.model-chip').forEach(c => {
+      c.classList.remove('active'); c.style.borderColor=''; c.style.color='';
+    });
+    const chip = document.querySelector(`.model-chip[data-id="${mid}"]`);
+    if(chip){ const m=MODELS.find(x=>x.id===mid); chip.classList.add('active'); if(m){chip.style.borderColor=m.color;chip.style.color=m.color;} }
+    refreshRefGrids();
   }
+
+  // Switch tab and pre-fill prompt (rawPrompt stored — no double identity)
+  if(item.type==='video'){
+    activeTab='video';
+    document.querySelectorAll('.ptab').forEach(x=>x.classList.remove('active'));
+    document.querySelector('.ptab[data-t="video"]')?.classList.add('active');
+    $('timages').style.display='none'; $('tvideo').style.display='';
+    $('vi-p').value = item.prompt||'';
+  } else {
+    activeTab='images';
+    document.querySelectorAll('.ptab').forEach(x=>x.classList.remove('active'));
+    document.querySelector('.ptab[data-t="images"]')?.classList.add('active');
+    $('timages').style.display=''; $('tvideo').style.display='none';
+    $('sd-p').value = item.prompt||'';
+  }
+  updateCostPreviews();
 }
 
 function updateBadge() {
@@ -2383,6 +2367,7 @@ function deleteModel(id) {
   if (!confirm(msg)) return;
   localStorage.removeItem('cuzo_refs_' + id);
   localStorage.removeItem('cuzo_ref_urls_' + id);
+  localStorage.removeItem('cuzo_identity_' + id);
   MODELS.splice(MODELS.findIndex(x => x.id === id), 1);
   saveModels();
   if (activeModel === id) activeModel = MODELS[0]?.id || '';

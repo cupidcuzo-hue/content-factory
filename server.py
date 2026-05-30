@@ -296,11 +296,10 @@ def serve_cached_img(job_id):
 # ── Socket.io emit helper ──────────────────────────────────────────────────────
 
 def emit_to(socket_id, event, data):
-    """Emit a Socket.io event to a specific client room."""
+    """Emit a Socket.io event to a specific client room.
+    If socket_id is missing, skip — never broadcast to all clients (multi-user safety)."""
     if socket_id:
         socketio.emit(event, data, room=socket_id)
-    else:
-        socketio.emit(event, data)  # broadcast if no room
 
 # ── Google Drive upload ───────────────────────────────────────────────────────
 
@@ -585,7 +584,8 @@ def _kie_submit_and_poll(job_id, kie_model, payload_input, socket_id, headers):
 def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
               image_url: str | None, mode: str | None, model_name: str, socket_id: str,
               mc_input_urls: list | None = None, mc_video_urls: list | None = None,
-              mc_orientation: str | None = None, sound: bool = False):
+              mc_orientation: str | None = None, sound: bool = False,
+              multi_shots: bool = False):
     """Generate video via KIE.ai, upload to Drive, log cost.
     Motion control mode: pass mc_input_urls + mc_video_urls instead of prompt/duration.
     """
@@ -605,23 +605,25 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
         if mc_orientation and 'kling-3.0' not in kie_model:
             payload_input['character_orientation'] = mc_orientation
     else:
-        # Kling 2.6 / v2.1 = 5s or 10s only; Kling 3.0 = 3–15s; others unrestricted
+        # Clamp duration to each model's valid range
         raw_dur = int(duration or 5)
         if kie_model in ('kling-2.6/text-to-video', 'kling-2.6/image-to-video') or kie_model.startswith('kling/v2-1'):
-            raw_dur = 10 if raw_dur > 7 else 5
+            raw_dur = 10 if raw_dur > 7 else 5          # 5s or 10s only
         elif kie_model == 'kling-3.0/video':
-            raw_dur = max(3, min(15, raw_dur))
+            raw_dur = max(3, min(15, raw_dur))           # 3–15s
+        elif kie_model == 'bytedance/seedance-2':
+            raw_dur = max(5, min(10, raw_dur))           # 5–10s (confirmed valid range)
         dur_str = str(raw_dur)
 
-        # ── kling 3.0 — uses image_urls array + multi_shots:false ────────────
+        # ── kling 3.0 — uses image_urls array + multi_shots flag ────────────
         if kie_model == 'kling-3.0/video':
             payload_input = {
                 'prompt': prompt,
                 'sound': sound,
                 'aspect_ratio': ratio,
                 'duration': dur_str,
-                'mode': mode or 'std',  # std / pro / 4K — quality tier
-                'multi_shots': False,
+                'mode': mode or 'std',   # std / pro / 4K — quality tier
+                'multi_shots': multi_shots,  # from UI toggle
             }
             if image_url:
                 payload_input['image_urls'] = [image_url]
@@ -1052,6 +1054,7 @@ def api_gen_video():
             mc_video_urls=d.get('mc_video_urls'),
             mc_orientation=d.get('mc_orientation'),
             sound=bool(d.get('sound', False)),
+            multi_shots=bool(d.get('multi_shots', False)),
         ))
     t.start()
     return jsonify({'ok': True, 'job_id': d['job_id']})
