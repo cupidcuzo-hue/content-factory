@@ -473,6 +473,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
         <div class="src-row" style="margin-bottom:10px">
           <span class="src-lbl">Source</span>
           <div class="src-pill active" id="vsrc-kie" onclick="setVideoProvider('kie')">KIE</div>
+          <div class="src-pill" id="vsrc-lz" onclick="setVideoProvider('laozhang')">⚡ Laozhang</div>
         </div>
         <div id="lz-vid-opts" style="display:none;margin-bottom:14px">
           <select id="lz-vid-m" onchange="updateCostPreviews()">
@@ -1866,6 +1867,7 @@ async function genMc(mid) {
       job_id: cid,
       prompt: 'Motion Control',
       model,
+      provider: 'kie',   // Motion control is KIE-only
       mc_input_urls: [imageUrl],
       mc_video_urls: [videoUrl],
       mc_orientation: model!=='kling-3.0/motion-control' ? orient : null,
@@ -1900,6 +1902,7 @@ async function genSd(mid) {
 
   btn.innerHTML='<div class="spinner"></div>Submitting…';
   const m=MODELS.find(x=>x.id===mid);
+  const negPrompt = ($('sd-n') ? $('sd-n').value.trim() : '');
   const job_ids=[];
   for(let i=0;i<cnt;i++){
     const cid=uid(); job_ids.push(cid);
@@ -1908,7 +1911,7 @@ async function genSd(mid) {
   }
   const res = (imageProvider === 'laozhang' && $('sd-q').value === 'high') ? '4K' : '2K';
   fetch(BASE_URL+'/api/generate/image/batch',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({job_ids,prompt:apiPrompt,provider:imageProvider,model,resolution:res,ratio,model_name:m?.name||mid,ref_urls:refUrls,socket_id:socket?.id||''})
+    body:JSON.stringify({job_ids,prompt:apiPrompt,provider:imageProvider,model,resolution:res,ratio,model_name:m?.name||mid,ref_urls:refUrls,negative_prompt:negPrompt,socket_id:socket?.id||''})
   }).catch(e=>{ job_ids.forEach(cid=>{pendingJobs.delete(cid);failCard(cid,e.message||'Submit failed');}); });
   btn.disabled=false; btn.textContent='Generate';
 }
@@ -1939,6 +1942,7 @@ async function genVi(mid) {
   const sendMode = model === 'kling-3.0/video';
   const viMode = $('vi-mode') ? $('vi-mode').value : 'std';
   const multiShot = $('vi-multishot') ? $('vi-multishot').checked : false;
+  const negPrompt = ($('vi-n') ? $('vi-n').value.trim() : '');
 
   btn.innerHTML='<div class="spinner"></div>Submitting…';
   const m=MODELS.find(x=>x.id===mid);
@@ -1949,7 +1953,7 @@ async function genVi(mid) {
     // End frame only supported on v2.1 Pro
     const tailB64 = (model === 'kling/v2-1-pro') ? (viEndFrameB64 || null) : null;
     fetch(BASE_URL+'/api/generate/video',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({job_id:cid,prompt:apiPrompt,model,provider:videoProvider,duration:dur,ratio,image_b64:startFrameB64,tail_image_b64:tailB64,mode:sendMode?viMode:null,sound,multi_shots:multiShot,model_name:m?.name||mid,socket_id:socket?.id||''})
+      body:JSON.stringify({job_id:cid,prompt:apiPrompt,model,provider:videoProvider,duration:dur,ratio,image_b64:startFrameB64,tail_image_b64:tailB64,mode:sendMode?viMode:null,sound,multi_shots:multiShot,negative_prompt:negPrompt,model_name:m?.name||mid,socket_id:socket?.id||''})
     }).catch(e=>{ pendingJobs.delete(cid); failCard(cid,e.message||'Submit failed'); });
   }
   btn.disabled=false; btn.textContent='Generate';
@@ -2033,9 +2037,9 @@ function addPend(cid, mid, type, prompt, label, ratio) {
   const t=getTarget(mid); t.insertBefore(card,t.firstChild);
   card.scrollIntoView({behavior:'smooth',block:'nearest'});
   updateBadge();
-  // Auto-cancel if API never responds — images 6 min, videos 12 min (KIE can take 10 min+)
-  const limitMs = type==='video' ? 12*60*1000 : 6*60*1000;
-  const limitLabel = type==='video' ? '12 min' : '6 min';
+  // Auto-cancel if API never responds — images 6 min, videos 15 min (Sora 2 Pro can take 12 min+)
+  const limitMs = type==='video' ? 15*60*1000 : 6*60*1000;
+  const limitLabel = type==='video' ? '15 min' : '6 min';
   setTimeout(() => {
     if (pendingJobs.has(cid)) {
       pendingJobs.delete(cid);
@@ -2075,7 +2079,7 @@ function failCard(cid, msg) {
 function retryJob(cid) {
   const item = items.find(x=>x.id===cid);
   if(!item) return;
-  const mid = item.mid;
+  const mid = item.modelId || item.mid;
 
   // Switch to the model that generated this job
   if(mid && MODELS.find(x=>x.id===mid)) {

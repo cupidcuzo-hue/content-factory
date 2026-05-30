@@ -138,6 +138,11 @@ LAOZHANG_MODEL_COSTS = {
     'flux-1-schnell':               0.010,
     'flux-kontext-pro':             0.035,   # Flux Kontext — uses aspect_ratio not size
     'flux-kontext-max':             0.070,   # Flux Kontext Max — highest quality
+    # Seedream models
+    'seedream/4.5-edit':            0.060,
+    'seedream/4.5-text-to-image':   0.050,
+    'bytedance/seedream-v4-text-to-image': 0.040,
+    'bytedance/seedream':           0.020,
 }
 
 KIE_IMAGE_COSTS = {
@@ -190,6 +195,7 @@ SORA2_SIZE_MAP = {
     '1:1':  '720x720',
     '3:4':  '720x960',
     '4:3':  '960x720',
+    '21:9': '1280x544',
 }
 
 LAOZHANG_VIDEO_SIZE_MAP = {
@@ -198,6 +204,7 @@ LAOZHANG_VIDEO_SIZE_MAP = {
     '1:1':  '720x720',
     '3:4':  '576x768',
     '4:3':  '768x576',
+    '21:9': '1280x544',
 }
 
 IMG_SIZE_MAP = {
@@ -206,24 +213,25 @@ IMG_SIZE_MAP = {
     ('4:3',  '2K'): '1024x768',  ('4:3',  '4K'): '2048x1536', ('4:3',  '1K'): '512x384',
     ('3:4',  '2K'): '768x1024',  ('3:4',  '4K'): '1536x2048', ('3:4',  '1K'): '384x512',
     ('16:9', '2K'): '1820x1024', ('16:9', '4K'): '3640x2048', ('16:9', '1K'): '910x512',
+    ('21:9', '2K'): '1920x816',  ('21:9', '4K'): '3840x1632', ('21:9', '1K'): '960x416',
 }
 
 # DALL-E 3 only supports these exact sizes
 DALLE3_SIZE_MAP = {
     '9:16': '1024x1792', '3:4': '1024x1792', '1:1': '1024x1024',
-    '4:3': '1792x1024', '16:9': '1792x1024',
+    '4:3': '1792x1024', '16:9': '1792x1024', '21:9': '1792x1024',
 }
 
 # gpt-image-1 only supports these exact sizes
 GPTI1_SIZE_MAP = {
     '9:16': '1024x1536', '3:4': '1024x1536', '1:1': '1024x1024',
-    '4:3': '1536x1024', '16:9': '1536x1024',
+    '4:3': '1536x1024', '16:9': '1536x1024', '21:9': '1536x1024',
 }
 
 # gpt-image-2 / gemini require sizes that are multiples of 16
 GPTI2_SIZE_MAP = {
     '9:16': '1024x1792', '3:4': '1024x1344', '1:1': '1024x1024',
-    '4:3': '1344x1024', '16:9': '1792x1024',
+    '4:3': '1344x1024', '16:9': '1792x1024', '21:9': '1792x768',
 }
 
 # Models that need special parameter handling
@@ -626,7 +634,8 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
               mc_input_urls: list | None = None, mc_video_urls: list | None = None,
               mc_orientation: str | None = None, sound: bool = False,
               multi_shots: bool = False, image_b64: str | None = None,
-              tail_image_b64: str | None = None, tail_image_url: str | None = None):
+              tail_image_b64: str | None = None, tail_image_url: str | None = None,
+              negative_prompt: str = ''):
     """Generate video via KIE.ai, upload to Drive, log cost.
     Motion control mode: pass mc_input_urls + mc_video_urls instead of prompt/duration.
     """
@@ -737,14 +746,28 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
 
         # ── kling v2.1 master text-to-video ──────────────────────────────────
         elif kie_model == 'kling/v2-1-master-text-to-video':
-            # No sound param per docs
-            payload_input = {
-                'prompt': prompt,
-                'duration': dur_str,
-                'aspect_ratio': ratio,
-                'negative_prompt': 'blur, distort, and low quality',
-                'cfg_scale': 0.5,
-            }
+            if image_url:
+                # Start frame provided — route to master i2v instead (master-t2v has no image param)
+                log.info(f"[{job_id}] Routing v2.1 master-text-to-video → master-image-to-video (start frame detected)")
+                kie_model = 'kling/v2-1-master-image-to-video'
+                default_neg = negative_prompt or 'different person, face change, identity change, distorted face, ugly, blurry'
+                payload_input = {
+                    'prompt': prompt,
+                    'negative_prompt': default_neg,
+                    'duration': dur_str,
+                    'image_url': image_url,
+                    'cfg_scale': 0.5,
+                }
+            else:
+                # No sound param per docs
+                default_neg = negative_prompt or 'blur, distort, and low quality'
+                payload_input = {
+                    'prompt': prompt,
+                    'duration': dur_str,
+                    'aspect_ratio': ratio,
+                    'negative_prompt': default_neg,
+                    'cfg_scale': 0.5,
+                }
 
         # ── kling v2.1 i2v: standard / pro / master-image-to-video ──────────
         # Per docs: NO sound param, NO mode param, cfg_scale optional
@@ -760,9 +783,10 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
                     'duration': dur_str,
                 }
             else:
+                default_neg = negative_prompt or 'different person, face change, identity change, different face, morphing, distorted face, ugly, blurry'
                 payload_input = {
                     'prompt': prompt,
-                    'negative_prompt': 'different person, face change, identity change, different face, morphing, distorted face, ugly, blurry',
+                    'negative_prompt': default_neg,
                     'duration': dur_str,
                     'image_url': image_url,
                     'cfg_scale': 0.5,
@@ -818,18 +842,33 @@ def _parse_lz_video_url(d: dict) -> str | None:
 
 def gen_video_laozhang(job_id: str, prompt: str, model: str, duration: str,
                        ratio: str, image_url: str | None, socket_id: str,
-                       model_name: str = 'unknown'):
+                       model_name: str = 'unknown', image_b64: str | None = None):
     """Generate video via Laozhang.ai.
     Handles both sync (URL in first response) and async (task ID + polling) APIs.
     Wan 2.1 and Kling models both supported.
     """
     cost_per = LAOZHANG_VIDEO_COSTS.get(model, 0.15)
-    size = LAOZHANG_VIDEO_SIZE_MAP.get(ratio, '720x1280')
     headers = {'Authorization': f'Bearer {LAOZHANG_API_KEY}', 'Content-Type': 'application/json'}
+
+    # Upload base64 start frame to KIE file storage if provided (Bug 2)
+    if image_b64 and not image_url:
+        try:
+            log.info(f"[{job_id}] Uploading base64 start frame to KIE file storage (for Laozhang)…")
+            image_url = upload_to_kie(image_b64)
+            log.info(f"[{job_id}] Start frame uploaded: {image_url}")
+        except Exception as e:
+            log.warning(f"[{job_id}] KIE file upload failed for Laozhang: {e} — continuing without start frame")
 
     emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Submitting to Laozhang…', 'pct': 5})
 
-    payload = {'model': model, 'prompt': prompt, 'size': size, 'duration': int(duration)}
+    # Kling models use aspect_ratio, Wan/other models use size (Bug 12)
+    _KLING_LZ_MODELS = {'kling-3.0/video', 'kling-2.6/text-to-video',
+                        'kling/v2-1-pro', 'kling/v2-1-standard', 'kling/v2-1-master'}
+    if model in _KLING_LZ_MODELS:
+        payload = {'model': model, 'prompt': prompt, 'aspect_ratio': ratio, 'duration': int(duration)}
+    else:
+        size = LAOZHANG_VIDEO_SIZE_MAP.get(ratio, '720x1280')
+        payload = {'model': model, 'prompt': prompt, 'size': size, 'duration': int(duration)}
     if image_url:
         payload['image_url'] = image_url
 
@@ -1109,9 +1148,14 @@ def index():
 @app.route('/api/generate/image', methods=['POST'])
 def api_gen_image():
     d = request.get_json(force=True)
+    # Append negative_prompt to the main prompt — Laozhang image API has no native neg-prompt field
+    prompt = d['prompt']
+    neg = d.get('negative_prompt', '').strip()
+    if neg:
+        prompt = f"{prompt} [avoid: {neg}]"
     t = threading.Thread(target=gen_image, daemon=True, kwargs=dict(
         job_id=d['job_id'],
-        prompt=d['prompt'],
+        prompt=prompt,
         resolution=d.get('resolution', '2K'),
         ratio=d.get('ratio', '9:16'),
         model=d.get('model', 'nano-banana-pro'),
@@ -1129,13 +1173,18 @@ def api_gen_image_batch():
     d = request.get_json(force=True)
     provider = d.get('provider', 'laozhang')
     job_ids  = d['job_ids']
+    # Append negative_prompt to the main prompt
+    prompt = d['prompt']
+    neg = d.get('negative_prompt', '').strip()
+    if neg:
+        prompt = f"{prompt} [avoid: {neg}]"
 
     if provider == 'kie':
         # KIE doesn't batch — fire one thread per image, all in parallel
         for job_id in job_ids:
             threading.Thread(target=gen_image_kie, daemon=True, kwargs=dict(
                 job_id=job_id,
-                prompt=d['prompt'],
+                prompt=prompt,
                 ratio=d.get('ratio', '9:16'),
                 model=d.get('model', 'nano-banana-pro'),
                 model_name=d.get('model_name', 'unknown'),
@@ -1146,7 +1195,7 @@ def api_gen_image_batch():
         # Laozhang: one API call with n=count
         threading.Thread(target=gen_image_batch, daemon=True, kwargs=dict(
             job_ids=job_ids,
-            prompt=d['prompt'],
+            prompt=prompt,
             resolution=d.get('resolution', '2K'),
             ratio=d.get('ratio', '9:16'),
             model=d.get('model', 'nano-banana-pro'),
@@ -1184,6 +1233,7 @@ def api_gen_video():
                 duration=str(d.get('duration', '5')),
                 ratio=d.get('ratio', '9:16'),
                 image_url=d.get('image_url'),
+                image_b64=d.get('image_b64'),
                 model_name=d.get('model_name', 'unknown'),
                 socket_id=d.get('socket_id', ''),
             ))
@@ -1206,6 +1256,7 @@ def api_gen_video():
             mc_orientation=d.get('mc_orientation'),
             sound=bool(d.get('sound', False)),
             multi_shots=bool(d.get('multi_shots', False)),
+            negative_prompt=d.get('negative_prompt', ''),
         ))
     t.start()
     return jsonify({'ok': True, 'job_id': d['job_id']})
@@ -1407,27 +1458,38 @@ def api_debug_kie_video():
     prompt    = 'beautiful woman walking on beach, cinematic'
     dur_str   = str(int(duration))
 
-    # Build payload using the same logic as gen_video()
+    # Build payload mirroring gen_video() logic exactly
     if model == 'kling-3.0/video':
         inp = {'prompt': prompt, 'sound': False, 'aspect_ratio': ratio, 'duration': dur_str, 'multi_shots': False}
         if image_url:
             inp['image_urls'] = [image_url]
-    elif model == 'kling-2.6/text-to-video':
-        inp = {'prompt': prompt, 'sound': False, 'aspect_ratio': ratio, 'duration': dur_str}
+    elif model in ('kling-2.6/text-to-video', 'kling-2.6/image-to-video'):
         if image_url:
-            inp['image_url'] = image_url
+            model = 'kling-2.6/image-to-video'
+            inp = {'prompt': prompt, 'aspect_ratio': ratio, 'duration': dur_str,
+                   'image_urls': [image_url], 'sound': False}
+        else:
+            model = 'kling-2.6/text-to-video'
+            inp = {'prompt': prompt, 'sound': False, 'aspect_ratio': ratio, 'duration': dur_str}
     elif model == 'bytedance/seedance-2':
-        inp = {'prompt': prompt, 'resolution': '720p', 'aspect_ratio': ratio, 'duration': int(duration)}
+        inp = {'prompt': prompt, 'resolution': '720p', 'aspect_ratio': ratio, 'duration': int(duration),
+               'generate_audio': False}
         if image_url:
-            inp['image_url'] = image_url
+            inp['first_frame_url'] = image_url  # correct param per KIE docs
     elif model == 'kling/v2-1-master-text-to-video':
-        inp = {'prompt': prompt, 'duration': dur_str, 'aspect_ratio': ratio,
-               'negative_prompt': 'blur, distort, and low quality', 'cfg_scale': 0.5}
         if image_url:
-            inp['image_url'] = image_url
-    else:  # i2v models
-        inp = {'prompt': prompt, 'negative_prompt': '', 'aspect_ratio': ratio,
-               'duration': dur_str, 'mode': mode}
+            # Reroute to master i2v (master-t2v has no image param)
+            model = 'kling/v2-1-master-image-to-video'
+            inp = {'prompt': prompt, 'duration': dur_str,
+                   'negative_prompt': 'blur, distort, and low quality',
+                   'image_url': image_url, 'cfg_scale': 0.5}
+        else:
+            inp = {'prompt': prompt, 'duration': dur_str, 'aspect_ratio': ratio,
+                   'negative_prompt': 'blur, distort, and low quality', 'cfg_scale': 0.5}
+    else:  # v2.1 i2v: standard / pro / master-image-to-video — NO mode param per docs
+        inp = {'prompt': prompt,
+               'negative_prompt': 'different person, face change, distorted face, ugly, blurry',
+               'aspect_ratio': ratio, 'duration': dur_str, 'cfg_scale': 0.5}
         if image_url:
             inp['image_url'] = image_url
 
