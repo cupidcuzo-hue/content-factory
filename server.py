@@ -154,7 +154,8 @@ KIE_IMAGE_COSTS = {
 VIDEO_COSTS = {
     'kling/v2-1-standard':               0.125,
     'kling/v2-1-pro':                    0.250,
-    'kling/v2-1-master':                 0.800,
+    'kling/v2-1-master-image-to-video':  0.800,
+    'kling/v2-1-master':                 0.800,  # fallback alias
     'kling/v2-1-master-text-to-video':   0.800,
     'kling-3.0/video':                   0.350,
     'kling-2.6/text-to-video':           0.250,
@@ -238,7 +239,7 @@ def _lz_payload(model: str, prompt: str, ratio: str, resolution: str, ref_urls: 
 KIE_TIER_MAP = {
     'standard': 'kling/v2-1-standard',
     'pro':      'kling/v2-1-pro',
-    'master':   'kling/v2-1-master',
+    'master':   'kling/v2-1-master-image-to-video',
 }
 
 KIE_BASE = 'https://api.kie.ai/api/v1/jobs'
@@ -586,7 +587,7 @@ def upload_to_kie(base64_data: str) -> str:
     Files are stored for 3 days — enough for any video generation pipeline.
     """
     resp = requests.post(
-        'https://kieai.redpandaai.co/api/file-base64-upload',
+        'https://api.kie.ai/api/file-base64-upload',
         headers={'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'},
         json={'base64Data': base64_data, 'uploadPath': 'images/base64/'},
         timeout=60,
@@ -603,7 +604,8 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
               image_url: str | None, mode: str | None, model_name: str, socket_id: str,
               mc_input_urls: list | None = None, mc_video_urls: list | None = None,
               mc_orientation: str | None = None, sound: bool = False,
-              multi_shots: bool = False, image_b64: str | None = None):
+              multi_shots: bool = False, image_b64: str | None = None,
+              tail_image_b64: str | None = None, tail_image_url: str | None = None):
     """Generate video via KIE.ai, upload to Drive, log cost.
     Motion control mode: pass mc_input_urls + mc_video_urls instead of prompt/duration.
     """
@@ -621,6 +623,15 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
             log.warning(f"[{job_id}] KIE file upload failed: {e} — continuing without start frame")
             emit_to(socket_id, 'job:progress', {'job_id': job_id, 'msg': f'Frame upload failed: {e} — generating without it'})
 
+    # Upload tail (end) frame if provided as base64
+    if tail_image_b64 and not tail_image_url:
+        try:
+            log.info(f"[{job_id}] Uploading base64 end frame to KIE file storage…")
+            tail_image_url = upload_to_kie(tail_image_b64)
+            log.info(f"[{job_id}] End frame uploaded: {tail_image_url}")
+        except Exception as e:
+            log.warning(f"[{job_id}] KIE end frame upload failed: {e} — ignoring end frame")
+
     is_motion_control = mc_input_urls or mc_video_urls
 
     if is_motion_control:
@@ -635,23 +646,24 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
     else:
         # Clamp duration to each model's valid range
         raw_dur = int(duration or 5)
+        # Clamp duration to each model's valid range (per KIE docs)
         if kie_model in ('kling-2.6/text-to-video', 'kling-2.6/image-to-video') or kie_model.startswith('kling/v2-1'):
             raw_dur = 10 if raw_dur > 7 else 5          # 5s or 10s only
         elif kie_model == 'kling-3.0/video':
             raw_dur = max(3, min(15, raw_dur))           # 3–15s
         elif kie_model == 'bytedance/seedance-2':
-            raw_dur = max(5, min(10, raw_dur))           # 5–10s (confirmed valid range)
+            raw_dur = max(4, min(15, raw_dur))           # 4–15s (per docs)
         dur_str = str(raw_dur)
 
-        # ── kling 3.0 — uses image_urls array + multi_shots flag ────────────
+        # ── kling 3.0 — image_urls array, multi_shots, mode required ────────
         if kie_model == 'kling-3.0/video':
             payload_input = {
                 'prompt': prompt,
                 'sound': sound,
                 'aspect_ratio': ratio,
                 'duration': dur_str,
-                'mode': mode or 'std',   # std / pro / 4K — quality tier
-                'multi_shots': multi_shots,  # from UI toggle
+                'mode': mode or 'std',       # std / pro / 4K
+                'multi_shots': multi_shots,
             }
             if image_url:
                 payload_input['image_urls'] = [image_url]
@@ -659,7 +671,7 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
         # ── kling-2.6 text-to-video ──────────────────────────────────────────
         elif kie_model == 'kling-2.6/text-to-video':
             if image_url:
-                # Start frame provided — use the real Kling 2.6 i2v model
+                # Start frame provided — use real Kling 2.6 i2v model
                 kie_model = 'kling-2.6/image-to-video'
                 payload_input = {
                     'prompt': prompt,
@@ -676,19 +688,9 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
                     'duration': dur_str,
                 }
 
-        # ── Seedance 2.0 — text-to-video only, no image input ───────────────
-        elif kie_model == 'bytedance/seedance-2':
-            payload_input = {
-                'prompt': prompt,
-                'resolution': '720p',
-                'aspect_ratio': ratio,
-                'duration': int(dur_str),
-            }
-
-        # ── kling-2.6 image-to-video (real KIE model — uses image_urls array) ──
+        # ── kling-2.6 image-to-video (uses image_urls array per docs) ────────
         elif kie_model == 'kling-2.6/image-to-video':
             if not image_url:
-                # No start frame — fall back to T2V
                 kie_model = 'kling-2.6/text-to-video'
                 payload_input = {'prompt': prompt, 'sound': sound, 'aspect_ratio': ratio, 'duration': dur_str}
             else:
@@ -700,20 +702,31 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
                     'sound': sound,
                 }
 
+        # ── Seedance 2.0 — supports first_frame_url, generate_audio (not sound) ──
+        elif kie_model == 'bytedance/seedance-2':
+            payload_input = {
+                'prompt': prompt,
+                'resolution': '720p',
+                'aspect_ratio': ratio,
+                'duration': int(dur_str),
+                'generate_audio': sound,     # Seedance uses generate_audio, not sound
+            }
+            if image_url:
+                payload_input['first_frame_url'] = image_url
+
         # ── kling v2.1 master text-to-video ──────────────────────────────────
         elif kie_model == 'kling/v2-1-master-text-to-video':
+            # No sound param per docs
             payload_input = {
                 'prompt': prompt,
                 'duration': dur_str,
                 'aspect_ratio': ratio,
                 'negative_prompt': 'blur, distort, and low quality',
                 'cfg_scale': 0.5,
-                'sound': sound,
             }
-            if image_url:
-                payload_input['image_url'] = image_url
 
-        # ── kling v2.1 i2v: standard / pro / master ──────────────────────────
+        # ── kling v2.1 i2v: standard / pro / master-image-to-video ──────────
+        # Per docs: NO sound param, NO mode param, cfg_scale optional
         else:
             if not image_url:
                 log.warning(f"[{job_id}] {kie_model} is image-to-video but no start frame supplied "
@@ -729,12 +742,13 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
                 payload_input = {
                     'prompt': prompt,
                     'negative_prompt': 'different person, face change, identity change, different face, morphing, distorted face, ugly, blurry',
-                    'aspect_ratio': ratio,
                     'duration': dur_str,
-                    'mode': mode or 'std',
                     'image_url': image_url,
-                    'sound': sound,
+                    'cfg_scale': 0.5,
                 }
+                # tail_image_url supported on v2.1 Pro
+                if tail_image_url and kie_model == 'kling/v2-1-pro':
+                    payload_input['tail_image_url'] = tail_image_url
 
     headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
 
@@ -1080,6 +1094,8 @@ def api_gen_video():
             ratio=d.get('ratio', '9:16'),
             image_url=d.get('image_url'),
             image_b64=d.get('image_b64'),
+            tail_image_url=d.get('tail_image_url'),
+            tail_image_b64=d.get('tail_image_b64'),
             mode=d.get('mode'),
             model_name=d.get('model_name', 'unknown'),
             socket_id=d.get('socket_id', ''),

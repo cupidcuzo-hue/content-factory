@@ -560,13 +560,14 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
           <div class="fg" id="vi-model-row">
             <label class="fl">Model</label>
             <select id="vi-m">
-              <option value="kling-2.6/text-to-video" selected>⚡ Kling 2.6</option>
+              <option value="kling-2.6/text-to-video" selected>⚡ Kling 2.6 T2V</option>
+              <option value="kling-2.6/image-to-video">⚡ Kling 2.6 I2V [Start Frame]</option>
               <option value="kling-3.0/video">🔥 Kling 3.0 (3–15s)</option>
               <option value="kling/v2-1-master-text-to-video">Kling v2.1 Master T2V</option>
-              <option value="bytedance/seedance-2">🌱 Seedance 2.0 (Text only)</option>
+              <option value="bytedance/seedance-2">🌱 Seedance 2.0 (4–15s)</option>
               <option value="kling/v2-1-standard">Kling v2.1 Standard [Start Frame]</option>
               <option value="kling/v2-1-pro">Kling v2.1 Pro [Start Frame] ⭐</option>
-              <option value="kling/v2-1-master">Kling v2.1 Master [Start Frame]</option>
+              <option value="kling/v2-1-master-image-to-video">Kling v2.1 Master [Start Frame]</option>
               <option value="__c">Custom…</option>
             </select>
             <input type="text" id="vi-mc" placeholder="Enter model string" style="display:none;margin-top:6px">
@@ -972,7 +973,8 @@ const COSTS = {
   // ── KIE video ──
   'kling/v2-1-standard':                 0.125,
   'kling/v2-1-pro':                      0.250,
-  'kling/v2-1-master':                   0.800,
+  'kling/v2-1-master-image-to-video':    0.800,
+  'kling/v2-1-master':                   0.800,  // alias
   'kling/v2-1-master-text-to-video':     0.800,
   'kling-3.0/video':                     0.350,
   'kling-2.6/text-to-video':             0.250,
@@ -1038,53 +1040,49 @@ function _updateRefNote() {
   }
 }
 
-// I2V models that use start frame + mode field
-const KIE_I2V_MODELS = new Set(['kling/v2-1-standard','kling/v2-1-pro','kling/v2-1-master']);
+// I2V models (require start frame, no sound per docs)
+const KIE_I2V_MODELS = new Set([
+  'kling/v2-1-standard','kling/v2-1-pro',
+  'kling/v2-1-master-image-to-video','kling-2.6/image-to-video'
+]);
+// Models that support the sound toggle (per KIE docs)
+const KIE_SOUND_MODELS = new Set([
+  'kling-2.6/text-to-video','kling-2.6/image-to-video','kling-3.0/video','bytedance/seedance-2'
+]);
 function updateKieModeRow() {
   const m = $('vi-m') ? $('vi-m').value : '';
-  const showMode = KIE_I2V_MODELS.has(m) || m === 'kling-3.0/video' || m === 'kling/v2-1-master-text-to-video' || m === '__c';
+  // Mode selector: only for Kling 3.0 (std/pro/4K)
+  const showMode = m === 'kling-3.0/video' || m === '__c';
   if ($('vi-mode-row')) $('vi-mode-row').style.display = (videoProvider === 'kie' && showMode) ? '' : 'none';
-  // Sound: visible for all models (Seedance doesn't support it but we just don't send the param)
-  if ($('vi-sound-row')) $('vi-sound-row').style.display = '';
-  // Duration: kling = 5s/10s only; Laozhang/non-kling = full 5–15s
+  // Sound toggle: only for models that actually support it per KIE docs
+  const showSound = videoProvider === 'kie' && (KIE_SOUND_MODELS.has(m) || m === '__c');
+  if ($('vi-sound-row')) $('vi-sound-row').style.display = showSound ? '' : 'none';
+  // Duration ranges per KIE docs
   const dur = $('vi-d');
   if(!dur) return;
-  // kling 2.6 / v2.1 = 5s or 10s only; kling 3.0 = 3–15s; everything else = 5–15s
   const isKling26orV21 = videoProvider === 'kie' && (
     m === 'kling-2.6/text-to-video' || m === 'kling-2.6/image-to-video' ||
-    m.startsWith('kling/v2-1') || m === 'kling/v2-1-master-text-to-video'
+    m.startsWith('kling/v2-1')
   );
   const isKling3   = videoProvider === 'kie' && m === 'kling-3.0/video';
   const isSeedance = videoProvider === 'kie' && m === 'bytedance/seedance-2';
   const cur = dur.value;
   if(isKling26orV21){
-    // 5s or 10s only
     dur.innerHTML='<option value="5">5s</option><option value="10">10s</option>';
     dur.value = ['5','10'].includes(cur) ? cur : '5';
   } else if(isKling3){
-    // Kling 3.0 supports 3–15s
-    if(dur.options.length !== 13){
-      let html='';
-      for(let i=3;i<=15;i++) html+=`<option value="${i}">${i}s</option>`;
-      dur.innerHTML=html;
-      dur.value=(parseInt(cur)>=3&&parseInt(cur)<=15)?cur:'5';
-    }
+    let html=''; for(let i=3;i<=15;i++) html+=`<option value="${i}">${i}s</option>`;
+    dur.innerHTML=html;
+    dur.value=(parseInt(cur)>=3&&parseInt(cur)<=15)?cur:'5';
   } else if(isSeedance){
-    // Seedance 2.0 supports 5–10s
-    if(dur.options.length !== 6){
-      let html='';
-      for(let i=5;i<=10;i++) html+=`<option value="${i}">${i}s</option>`;
-      dur.innerHTML=html;
-      dur.value=(parseInt(cur)>=5&&parseInt(cur)<=10)?cur:'5';
-    }
+    // Seedance: 4–15s per docs
+    let html=''; for(let i=4;i<=15;i++) html+=`<option value="${i}">${i}s</option>`;
+    dur.innerHTML=html;
+    dur.value=(parseInt(cur)>=4&&parseInt(cur)<=15)?cur:'5';
   } else {
-    // Full 5-15s range for Laozhang, non-kling KIE models
-    if(dur.options.length < 11){
-      let html='';
-      for(let i=5;i<=15;i++) html+=`<option value="${i}">${i}s</option>`;
-      dur.innerHTML=html;
-      dur.value=cur||'5';
-    }
+    let html=''; for(let i=5;i<=15;i++) html+=`<option value="${i}">${i}s</option>`;
+    dur.innerHTML=html;
+    dur.value=cur||'5';
   }
 }
 
@@ -1919,14 +1917,14 @@ async function genVi(mid) {
   let startFrameB64 = viStartFrameB64 || null;
 
   // i2v models require a start frame
-  const I2V_MODELS = ['kling/v2-1-standard','kling/v2-1-pro','kling/v2-1-master','kling-2.6/image-to-video'];
+  const I2V_MODELS = ['kling/v2-1-standard','kling/v2-1-pro','kling/v2-1-master-image-to-video','kling-2.6/image-to-video'];
   if(I2V_MODELS.includes(model) && !startFrameB64) {
     const go = confirm(`"${model}" needs a Start Frame.\n\nUpload one in the Frames section above, then generate.\n\nContinue without it? (will fall back to Kling 2.6 Text-to-Video)`);
     if(!go){btn.disabled=false;btn.textContent='Generate';return;}
   }
 
-  // mode param: needed for kling/v2-1 i2v models AND kling-3.0/video (std/pro/4K quality)
-  const sendMode = model.startsWith('kling/v2-1') || model === 'kling-3.0/video';
+  // mode param: only for Kling 3.0 (std/pro/4K quality tier)
+  const sendMode = model === 'kling-3.0/video';
   const viMode = $('vi-mode') ? $('vi-mode').value : 'std';
   const multiShot = $('vi-multishot') ? $('vi-multishot').checked : false;
 
@@ -1936,8 +1934,10 @@ async function genVi(mid) {
     const cid=uid(); addPend(cid,mid,'video',rawPrompt,'Video '+(i+1)+'/'+cnt,ratio);
     const sound = $('vi-sound') ? $('vi-sound').checked : false;
     pendingJobs.set(cid,{mid,type:'video',prompt:rawPrompt,model,cost,ratio,sound});
+    // End frame only supported on v2.1 Pro
+    const tailB64 = (model === 'kling/v2-1-pro') ? (viEndFrameB64 || null) : null;
     fetch(BASE_URL+'/api/generate/video',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({job_id:cid,prompt:apiPrompt,model,provider:videoProvider,duration:dur,ratio,image_b64:startFrameB64,mode:sendMode?viMode:null,sound,multi_shots:multiShot,model_name:m?.name||mid,socket_id:socket?.id||''})
+      body:JSON.stringify({job_id:cid,prompt:apiPrompt,model,provider:videoProvider,duration:dur,ratio,image_b64:startFrameB64,tail_image_b64:tailB64,mode:sendMode?viMode:null,sound,multi_shots:multiShot,model_name:m?.name||mid,socket_id:socket?.id||''})
     }).catch(e=>{ pendingJobs.delete(cid); failCard(cid,e.message||'Submit failed'); });
   }
   btn.disabled=false; btn.textContent='Generate';
