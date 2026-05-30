@@ -581,17 +581,45 @@ def _kie_submit_and_poll(job_id, kie_model, payload_input, socket_id, headers):
     return None, 'Timed out after 10 min — KIE queue is very long, try again later'
 
 
+def upload_to_kie(base64_data: str) -> str:
+    """Upload a base64 image to KIE's file storage and return the public download URL.
+    Files are stored for 3 days — enough for any video generation pipeline.
+    """
+    resp = requests.post(
+        'https://kieai.redpandaai.co/api/file-base64-upload',
+        headers={'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'},
+        json={'base64Data': base64_data, 'uploadPath': 'images/base64/'},
+        timeout=60,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    url = data.get('data', {}).get('downloadUrl') or data.get('downloadUrl')
+    if not url:
+        raise ValueError(f'KIE file upload returned no URL: {data}')
+    return url
+
+
 def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
               image_url: str | None, mode: str | None, model_name: str, socket_id: str,
               mc_input_urls: list | None = None, mc_video_urls: list | None = None,
               mc_orientation: str | None = None, sound: bool = False,
-              multi_shots: bool = False):
+              multi_shots: bool = False, image_b64: str | None = None):
     """Generate video via KIE.ai, upload to Drive, log cost.
     Motion control mode: pass mc_input_urls + mc_video_urls instead of prompt/duration.
     """
     # Resolve model string (tier shorthand or direct KIE model string)
     kie_model = KIE_TIER_MAP.get(model, model)
     cost_per = VIDEO_COSTS.get(kie_model, VIDEO_COSTS.get(model, 0.250))
+
+    # If a base64 start frame was sent, upload it to KIE file storage first
+    if image_b64 and not image_url:
+        try:
+            log.info(f"[{job_id}] Uploading base64 start frame to KIE file storage…")
+            image_url = upload_to_kie(image_b64)
+            log.info(f"[{job_id}] Start frame uploaded: {image_url}")
+        except Exception as e:
+            log.warning(f"[{job_id}] KIE file upload failed: {e} — continuing without start frame")
+            emit_to(socket_id, 'job:progress', {'job_id': job_id, 'msg': f'Frame upload failed: {e} — generating without it'})
 
     is_motion_control = mc_input_urls or mc_video_urls
 
@@ -631,16 +659,13 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
         # ── kling-2.6 text-to-video ──────────────────────────────────────────
         elif kie_model == 'kling-2.6/text-to-video':
             if image_url:
-                # When a ref/start-frame is provided, route to v2-1-pro i2v
-                # (KIE's kling-2.6/text-to-video ignores image_url — i2v needs a dedicated model)
-                kie_model = 'kling/v2-1-pro'
+                # Start frame provided — use the real Kling 2.6 i2v model
+                kie_model = 'kling-2.6/image-to-video'
                 payload_input = {
                     'prompt': prompt,
-                    'negative_prompt': 'different person, face change, identity change, different face, morphing, distorted face, ugly, blurry',
                     'aspect_ratio': ratio,
                     'duration': dur_str,
-                    'mode': mode or 'std',
-                    'image_url': image_url,
+                    'image_urls': [image_url],
                     'sound': sound,
                 }
             else:
@@ -660,21 +685,18 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
                 'duration': int(dur_str),
             }
 
-        # ── kling-2.6 image-to-video (removed from UI — routes to v2-1-pro) ────
+        # ── kling-2.6 image-to-video (real KIE model — uses image_urls array) ──
         elif kie_model == 'kling-2.6/image-to-video':
-            # This model doesn't exist on KIE — route directly to v2-1-pro with start frame
-            kie_model = 'kling/v2-1-pro'
             if not image_url:
+                # No start frame — fall back to T2V
                 kie_model = 'kling-2.6/text-to-video'
                 payload_input = {'prompt': prompt, 'sound': sound, 'aspect_ratio': ratio, 'duration': dur_str}
             else:
                 payload_input = {
                     'prompt': prompt,
-                    'negative_prompt': 'different person, face change, identity change, different face, morphing, distorted face, ugly, blurry',
                     'aspect_ratio': ratio,
                     'duration': dur_str,
-                    'mode': 'std',
-                    'image_url': image_url,
+                    'image_urls': [image_url],
                     'sound': sound,
                 }
 
@@ -1057,6 +1079,7 @@ def api_gen_video():
             duration=str(d.get('duration', '5')),
             ratio=d.get('ratio', '9:16'),
             image_url=d.get('image_url'),
+            image_b64=d.get('image_b64'),
             mode=d.get('mode'),
             model_name=d.get('model_name', 'unknown'),
             socket_id=d.get('socket_id', ''),

@@ -1915,17 +1915,12 @@ async function genVi(mid) {
   const cost=getCost(model);
   const btn=$('vi-gen'); btn.disabled=true; btn.innerHTML='<div class="spinner"></div>Submitting…';
 
-  // Upload manually-provided start frame first
-  const needUpload = viStartFrameB64 || viEndFrameB64;
-  if(needUpload && !getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings to use frames.');btn.disabled=false;btn.textContent='Generate';return;}
-  let startFrameUrl=null;
-  try {
-    if(viStartFrameB64){ btn.innerHTML='<div class="spinner"></div>Uploading start frame…'; startFrameUrl=await uploadCld(viStartFrameB64,'vi_start_'+Date.now()); }
-  } catch(e){ alert('Frame upload failed: '+e.message); btn.disabled=false; btn.textContent='Generate'; return; }
+  // Start frame: send as base64 to backend — backend uploads to KIE file storage (no Cloudinary needed)
+  let startFrameB64 = viStartFrameB64 || null;
 
-  // i2v models require a manually uploaded start frame
+  // i2v models require a start frame
   const I2V_MODELS = ['kling/v2-1-standard','kling/v2-1-pro','kling/v2-1-master','kling-2.6/image-to-video'];
-  if(I2V_MODELS.includes(model) && !startFrameUrl) {
+  if(I2V_MODELS.includes(model) && !startFrameB64) {
     const go = confirm(`"${model}" needs a Start Frame.\n\nUpload one in the Frames section above, then generate.\n\nContinue without it? (will fall back to Kling 2.6 Text-to-Video)`);
     if(!go){btn.disabled=false;btn.textContent='Generate';return;}
   }
@@ -1942,7 +1937,7 @@ async function genVi(mid) {
     const sound = $('vi-sound') ? $('vi-sound').checked : false;
     pendingJobs.set(cid,{mid,type:'video',prompt:rawPrompt,model,cost,ratio,sound});
     fetch(BASE_URL+'/api/generate/video',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({job_id:cid,prompt:apiPrompt,model,provider:videoProvider,duration:dur,ratio,image_url:startFrameUrl,mode:sendMode?viMode:null,sound,multi_shots:multiShot,model_name:m?.name||mid,socket_id:socket?.id||''})
+      body:JSON.stringify({job_id:cid,prompt:apiPrompt,model,provider:videoProvider,duration:dur,ratio,image_b64:startFrameB64,mode:sendMode?viMode:null,sound,multi_shots:multiShot,model_name:m?.name||mid,socket_id:socket?.id||''})
     }).catch(e=>{ pendingJobs.delete(cid); failCard(cid,e.message||'Submit failed'); });
   }
   btn.disabled=false; btn.textContent='Generate';
