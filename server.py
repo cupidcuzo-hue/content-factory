@@ -620,6 +620,7 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
                 'sound': sound,
                 'aspect_ratio': ratio,
                 'duration': dur_str,
+                'mode': mode or 'std',  # std / pro / 4K — quality tier
                 'multi_shots': False,
             }
             if image_url:

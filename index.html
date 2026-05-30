@@ -496,7 +496,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
         <div id="vs-txt">
           <!-- Start + End frame -->
           <div class="fg">
-            <label class="fl">Frames <span>(optional)</span></label>
+            <label class="fl">Frames <span>(auto-uses ref photo if empty)</span></label>
             <div id="vi-frames-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
               <!-- Start frame -->
               <div>
@@ -1955,7 +1955,7 @@ async function genVi(mid) {
   const cost=getCost(model);
   const btn=$('vi-gen'); btn.disabled=true; btn.innerHTML='<div class="spinner"></div>Submitting…';
 
-  // Upload start frame to Cloudinary if provided (KIE only — Laozhang may not support frames)
+  // Upload manually-provided start frame first
   const needUpload = viStartFrameB64 || viEndFrameB64;
   if(needUpload && !getCldReady()){alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings to use frames.');btn.disabled=false;btn.textContent='Generate';return;}
   let startFrameUrl=null;
@@ -1963,14 +1963,28 @@ async function genVi(mid) {
     if(viStartFrameB64){ btn.innerHTML='<div class="spinner"></div>Uploading start frame…'; startFrameUrl=await uploadCld(viStartFrameB64,'vi_start_'+Date.now()); }
   } catch(e){ alert('Frame upload failed: '+e.message); btn.disabled=false; btn.textContent='Generate'; return; }
 
-  // mode param only needed for kling/v2-1 models (720p/1080p/4K quality tier)
-  const isKling3 = model.startsWith('kling/v2-1');
-  // i2v models require a start frame; warn user (backend will auto-fallback to kling-2.6 t2v)
+  // ── Auto-inject model ref photo as start frame if none manually provided ──
+  // All KIE video models accept image_url; this preserves identity without manual upload
+  if(!startFrameUrl && getCldReady()){
+    const refs = getRefs(mid);
+    if(refs.length > 0){
+      try{
+        btn.innerHTML='<div class="spinner"></div>Loading ref photo…';
+        const refUrls = await getRefUrls(mid);
+        if(refUrls.length > 0) startFrameUrl = refUrls[0];
+      } catch(e){ console.warn('Auto ref photo for video failed:', e.message); }
+    }
+  }
+
+  // i2v models require a start frame; warn only if we still have none after auto-ref
   const I2V_MODELS = ['kling/v2-1-standard','kling/v2-1-pro','kling/v2-1-master','kling-2.6/image-to-video'];
   if(I2V_MODELS.includes(model) && !startFrameUrl) {
-    const go = confirm(`"${model}" is an Image-to-Video model and requires a Start Frame.\n\nNo start frame was uploaded — the backend will fall back to Kling 2.6 Text-to-Video instead.\n\nContinue anyway?`);
+    const go = confirm(`"${model}" needs a Start Frame to preserve identity.\n\nNo start frame or ref photos found — backend will fall back to Kling 2.6 Text-to-Video.\n\nContinue anyway?`);
     if(!go){btn.disabled=false;btn.textContent='Generate';return;}
   }
+
+  // mode param: needed for kling/v2-1 i2v models AND kling-3.0/video (std/pro/4K quality)
+  const sendMode = model.startsWith('kling/v2-1') || model === 'kling-3.0/video';
   const viMode = $('vi-mode') ? $('vi-mode').value : 'std';
 
   btn.innerHTML='<div class="spinner"></div>Submitting…';
@@ -1980,7 +1994,7 @@ async function genVi(mid) {
     const sound = $('vi-sound') ? $('vi-sound').checked : false;
     pendingJobs.set(cid,{mid,type:'video',prompt,model,cost,ratio,sound});
     fetch(BASE_URL+'/api/generate/video',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({job_id:cid,prompt,model,provider:videoProvider,duration:dur,ratio,image_url:startFrameUrl,mode:isKling3?viMode:null,sound,model_name:m?.name||mid,socket_id:socket?.id||''})
+      body:JSON.stringify({job_id:cid,prompt,model,provider:videoProvider,duration:dur,ratio,image_url:startFrameUrl,mode:sendMode?viMode:null,sound,model_name:m?.name||mid,socket_id:socket?.id||''})
     }).catch(e=>{ pendingJobs.delete(cid); failCard(cid,e.message||'Submit failed'); });
   }
   btn.disabled=false; btn.textContent='Generate';
@@ -2292,10 +2306,13 @@ async function handleIdRefUpload(e) {
 }
 
 // Inject alwaysInclude into a prompt string
+// Prepend so identity description is highest priority for the model
 function withIdentity(prompt, mid) {
   const always = getAlwaysInclude(mid).trim();
   if (!always) return prompt;
-  return prompt + (prompt.endsWith(',') ? ' ' : ', ') + always;
+  if (!prompt) return always;
+  // Put identity first so model weights it more heavily
+  return always + ', ' + prompt;
 }
 
 // ── API DOT ──
