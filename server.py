@@ -898,7 +898,7 @@ def gen_video_laozhang(job_id: str, prompt: str, model: str, duration: str,
     else:
         # ── Step 3: Async — extract task/generation ID and poll ───────────────
         task_id = (d.get('id')
-                   or (d.get('data') or {}).get('id') if isinstance(d.get('data'), dict) else None
+                   or (d.get('data', {}) or {}).get('id')
                    or next((item.get('id') for item in (d.get('data') or []) if isinstance(item, dict)), None))
 
         if not task_id:
@@ -1460,7 +1460,7 @@ def api_debug_kie_video():
 
     # Build payload mirroring gen_video() logic exactly
     if model == 'kling-3.0/video':
-        inp = {'prompt': prompt, 'sound': False, 'aspect_ratio': ratio, 'duration': dur_str, 'multi_shots': False}
+        inp = {'prompt': prompt, 'sound': False, 'aspect_ratio': ratio, 'duration': dur_str, 'multi_shots': False, 'mode': mode}
         if image_url:
             inp['image_urls'] = [image_url]
     elif model in ('kling-2.6/text-to-video', 'kling-2.6/image-to-video'):
@@ -1486,10 +1486,10 @@ def api_debug_kie_video():
         else:
             inp = {'prompt': prompt, 'duration': dur_str, 'aspect_ratio': ratio,
                    'negative_prompt': 'blur, distort, and low quality', 'cfg_scale': 0.5}
-    else:  # v2.1 i2v: standard / pro / master-image-to-video — NO mode param per docs
+    else:  # v2.1 i2v: standard / pro / master-image-to-video — NO mode, NO aspect_ratio per docs
         inp = {'prompt': prompt,
                'negative_prompt': 'different person, face change, distorted face, ugly, blurry',
-               'aspect_ratio': ratio, 'duration': dur_str, 'cfg_scale': 0.5}
+               'duration': dur_str, 'cfg_scale': 0.5}
         if image_url:
             inp['image_url'] = image_url
 

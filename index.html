@@ -476,7 +476,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
           <div class="src-pill" id="vsrc-lz" onclick="setVideoProvider('laozhang')">⚡ Laozhang</div>
         </div>
         <div id="lz-vid-opts" style="display:none;margin-bottom:14px">
-          <select id="lz-vid-m" onchange="updateCostPreviews()">
+          <select id="lz-vid-m" onchange="updateCostPreviews();updateKieModeRow()">
             <optgroup label="── Sora 2 ──">
               <option value="sora-2">🎬 Sora 2 (10–15s)</option>
               <option value="sora-2-pro">🎬 Sora 2 Pro HD ($0.80)</option>
@@ -581,7 +581,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
             <input type="text" id="vi-mc" placeholder="Enter model string" style="display:none;margin-top:6px">
           </div>
           <div class="row2">
-            <div class="fg"><label class="fl">Aspect Ratio</label><select id="vi-r"><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option></select></div>
+            <div class="fg"><label class="fl">Aspect Ratio</label><select id="vi-r"><option value="9:16">9:16</option><option value="3:4">3:4</option><option value="1:1">1:1</option><option value="4:3">4:3</option><option value="16:9">16:9</option></select></div>
             <div class="fg"><label class="fl">Duration</label><select id="vi-d"><option value="5" selected>5s</option><option value="6">6s</option><option value="7">7s</option><option value="8">8s</option><option value="9">9s</option><option value="10">10s</option><option value="11">11s</option><option value="12">12s</option><option value="13">13s</option><option value="14">14s</option><option value="15">15s</option></select></div>
           </div>
           <div class="fg" id="vi-mode-row"><label class="fl">Mode</label><select id="vi-mode"><option value="std">Standard (720p)</option><option value="pro">Pro (1080p)</option><option value="4K">4K</option></select></div>
@@ -1073,12 +1073,14 @@ function updateKieModeRow() {
   // Duration ranges per KIE docs
   const dur = $('vi-d');
   if(!dur) return;
+  const lzm = ($('lz-vid-m')||{}).value || '';
   const isKling26orV21 = videoProvider === 'kie' && (
     m === 'kling-2.6/text-to-video' || m === 'kling-2.6/image-to-video' ||
     m.startsWith('kling/v2-1')
   );
   const isKling3   = videoProvider === 'kie' && m === 'kling-3.0/video';
   const isSeedance = videoProvider === 'kie' && m === 'bytedance/seedance-2';
+  const isSora2    = videoProvider === 'laozhang' && (lzm === 'sora-2' || lzm === 'sora-2-pro');
   const cur = dur.value;
   if(isKling26orV21){
     dur.innerHTML='<option value="5">5s</option><option value="10">10s</option>';
@@ -1092,6 +1094,10 @@ function updateKieModeRow() {
     let html=''; for(let i=4;i<=15;i++) html+=`<option value="${i}">${i}s</option>`;
     dur.innerHTML=html;
     dur.value=(parseInt(cur)>=4&&parseInt(cur)<=15)?cur:'5';
+  } else if(isSora2){
+    // Sora 2: 10s or 15s only
+    dur.innerHTML='<option value="10">10s</option><option value="15">15s</option>';
+    dur.value = ['10','15'].includes(cur) ? cur : '10';
   } else {
     let html=''; for(let i=5;i<=15;i++) html+=`<option value="${i}">${i}s</option>`;
     dur.innerHTML=html;
@@ -1949,6 +1955,9 @@ async function genVi(mid) {
   for(let i=0;i<cnt;i++){
     const cid=uid(); addPend(cid,mid,'video',rawPrompt,'Video '+(i+1)+'/'+cnt,ratio);
     const sound = $('vi-sound') ? $('vi-sound').checked : false;
+    // Store model/ratio/sound on items entry so retryJob can restore them
+    const _itm = items.find(x=>x.id===cid);
+    if(_itm){ _itm.model=model; _itm.ratio=ratio; _itm.sound=sound; _itm.vidProvider=videoProvider; }
     pendingJobs.set(cid,{mid,type:'video',prompt:rawPrompt,model,cost,ratio,sound});
     // End frame only supported on v2.1 Pro
     const tailB64 = (model === 'kling/v2-1-pro') ? (viEndFrameB64 || null) : null;
@@ -2099,6 +2108,18 @@ function retryJob(cid) {
     document.querySelector('.ptab[data-t="video"]')?.classList.add('active');
     $('timages').style.display='none'; $('tvideo').style.display='';
     $('vi-p').value = item.prompt||'';
+    // Restore provider, model, ratio, sound so retry uses the same settings
+    if(item.vidProvider) setVideoProvider(item.vidProvider);
+    if(item.ratio && $('vi-r')) $('vi-r').value = item.ratio;
+    if(item.model){
+      if(item.vidProvider==='laozhang' && $('lz-vid-m')) $('lz-vid-m').value = item.model;
+      else if($('vi-m')) $('vi-m').value = item.model;
+    }
+    if(typeof item.sound !== 'undefined' && $('vi-sound')){
+      $('vi-sound').checked = item.sound;
+      $('vi-sound-track').classList.toggle('vi-toggle-on', item.sound);
+    }
+    updateKieModeRow(); updateCostPreviews();
   } else {
     activeTab='images';
     document.querySelectorAll('.ptab').forEach(x=>x.classList.remove('active'));
@@ -2441,10 +2462,11 @@ function buildHFilters() {
 
 function renderHistory() {
   let h=JSON.parse(localStorage.getItem('cuzo_history')||'[]');
+  h=h.filter(x=>x.url&&x.prompt); // guard against corrupt/incomplete entries
   const q=$('hsearch').value.toLowerCase();
   if(hModelFil!=='all') h=h.filter(x=>x.modelId===hModelFil);
   if(hTypeFil!=='all') h=h.filter(x=>x.type===hTypeFil);
-  if(q) h=h.filter(x=>x.prompt.toLowerCase().includes(q));
+  if(q) h=h.filter(x=>(x.prompt||'').toLowerCase().includes(q));
   const g=$('hgrid'); g.innerHTML='';
   if(!h.length){g.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:40px">No history found.</div>';return;}
   h.forEach(x=>{
