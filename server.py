@@ -615,6 +615,11 @@ def upload_to_kie(base64_data: str) -> str:
     """Upload a base64 image to KIE's file storage and return the public download URL.
     Files are stored for 3 days — enough for any video generation pipeline.
     """
+    # Strip data URL prefix if present — compressImage() returns "data:image/jpeg;base64,..."
+    # but KIE's API requires raw base64 only. Without this strip the upload 400s silently.
+    if base64_data.startswith('data:') and ',' in base64_data:
+        base64_data = base64_data.split(',', 1)[1]
+
     resp = requests.post(
         'https://api.kie.ai/api/file-base64-upload',
         headers={'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'},
