@@ -1567,6 +1567,28 @@ def api_debug_kie_video_poll():
     return jsonify({'key_hint': key_hint, 'model': model, 'task_id': task_id, 'polls': polls})
 
 
+@app.route('/api/debug/kie-upload')
+def api_debug_kie_upload():
+    """Test upload_to_kie() with a real 1x1 JPEG — confirms file upload works end-to-end."""
+    import base64
+    # Minimal valid 1x1 red JPEG (no data: prefix — raw base64)
+    tiny_jpeg_b64 = (
+        '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDB'
+        'kSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAAR'
+        'CAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAA'
+        'AAAAAAAAAAAAAP/EABQBAQAAAAAAAAAAAAAAAAAAAAD/xAAUEQEAAAAAAAAAAAAA'
+        'AAAAAAAP/aAAwDAQACEQMRAD8AJQAB/9k='
+    )
+    key_hint = (KIE_API_KEY[:8] + '…') if KIE_API_KEY else 'NOT SET'
+    try:
+        url = upload_to_kie(tiny_jpeg_b64)
+        return jsonify({'ok': True, 'key_hint': key_hint, 'uploaded_url': url,
+                        'note': 'File upload works — KIE CDN URL returned'})
+    except Exception as e:
+        return jsonify({'ok': False, 'key_hint': key_hint, 'error': str(e),
+                        'note': 'File upload FAILED — this is why start frames are ignored'}), 500
+
+
 @app.route('/api/debug/kie-task-status')
 def api_debug_kie_task_status():
     """Single poll of a KIE task — instant. Usage: ?task_id=<id>"""
