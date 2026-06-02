@@ -1071,7 +1071,6 @@ function updateKieModeRow() {
   );
   const isKling3   = videoProvider === 'kie' && m === 'kling-3.0/video';
   const isSeedance = videoProvider === 'kie' && m === 'bytedance/seedance-2';
-  const isSora2    = videoProvider === 'laozhang' && (lzm === 'sora-2' || lzm === 'sora-2-pro');
   const cur = dur.value;
   if(isKling26orV21){
     dur.innerHTML='<option value="5">5s</option><option value="10">10s</option>';
@@ -1085,10 +1084,6 @@ function updateKieModeRow() {
     let html=''; for(let i=4;i<=15;i++) html+=`<option value="${i}">${i}s</option>`;
     dur.innerHTML=html;
     dur.value=(parseInt(cur)>=4&&parseInt(cur)<=15)?cur:'5';
-  } else if(isSora2){
-    // Sora 2: 10s or 15s only
-    dur.innerHTML='<option value="10">10s</option><option value="15">15s</option>';
-    dur.value = ['10','15'].includes(cur) ? cur : '10';
   } else {
     let html=''; for(let i=5;i<=15;i++) html+=`<option value="${i}">${i}s</option>`;
     dur.innerHTML=html;
@@ -1627,7 +1622,7 @@ function updateCostPreviews() {
   if($('sd-cp')) $('sd-cp').innerHTML=`Est. cost: <strong>~${f$(getCost(sdm)*sdc)}</strong> for ${sdc} image${sdc>1?'s':''}`;
 
   const vim = videoProvider === 'laozhang'
-    ? (($('lz-vid-m')||{}).value||'wan2.1-14b-720p')
+    ? (($('lz-vid-m')||{}).value||'wan2.1-i2v-14b-720p')
     : ($('vi-m').value==='__c'?($('vi-mc').value||'kling-3.0/video'):$('vi-m').value);
   const vic=parseInt($('vi-c').value)||3;
   if($('vi-cp')) $('vi-cp').innerHTML=`Est. cost: <strong>~${f$(getCost(vim)*vic)}</strong> for ${vic} video${vic>1?'s':''}`;
@@ -1918,7 +1913,7 @@ async function genVi(mid) {
   const apiPrompt=withIdentity(rawPrompt, mid);
   // Pick model from the active provider's dropdown
   const model = videoProvider === 'laozhang'
-    ? ($('lz-vid-m').value || 'wan2.1-14b-720p')
+    ? ($('lz-vid-m').value || 'wan2.1-i2v-14b-720p')
     : ($('vi-m').value==='__c' ? $('vi-mc').value.trim() : $('vi-m').value);
   if(!model){alert('Enter a model string.');return;}
   const cnt=parseInt($('vi-c').value), ratio=$('vi-r').value, dur=$('vi-d').value;
