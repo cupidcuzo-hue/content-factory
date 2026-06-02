@@ -477,20 +477,14 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
         </div>
         <div id="lz-vid-opts" style="display:none;margin-bottom:14px">
           <select id="lz-vid-m" onchange="updateCostPreviews();updateKieModeRow()">
-            <optgroup label="── Sora 2 ──">
-              <option value="sora-2">🎬 Sora 2 (10–15s)</option>
-              <option value="sora-2-pro">🎬 Sora 2 Pro HD ($0.80)</option>
-            </optgroup>
             <optgroup label="── Wan 2.1 ──">
-              <option value="wan2.1-14b-720p">Wan 2.1 720p</option>
-              <option value="wan2.1-14b-480p">Wan 2.1 480p (Fastest)</option>
-              <option value="wan2.1-i2v-14b-720p">Wan 2.1 Image-to-Video</option>
+              <option value="wan2.1-i2v-14b-720p" selected>Wan 2.1 I2V [Start Frame]</option>
             </optgroup>
             <optgroup label="── Kling via LZ ──">
-              <option value="kling-3.0/video">Kling 3.0</option>
-              <option value="kling/v2-1-pro">Kling v2.1 Pro</option>
-              <option value="kling/v2-1-standard">Kling v2.1 Standard</option>
-              <option value="kling/v2-1-master">Kling v2.1 Master</option>
+              <option value="kling-3.0/video">Kling 3.0 [Start Frame]</option>
+              <option value="kling/v2-1-pro">Kling v2.1 Pro [Start Frame]</option>
+              <option value="kling/v2-1-standard">Kling v2.1 Standard [Start Frame]</option>
+              <option value="kling/v2-1-master">Kling v2.1 Master [Start Frame]</option>
             </optgroup>
           </select>
         </div>
@@ -569,8 +563,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
             <select id="vi-m">
               <option value="kling-2.6/image-to-video" selected>⚡ Kling 2.6 I2V [Start Frame]</option>
               <option value="kling-3.0/video">🔥 Kling 3.0 (3–15s)</option>
-              <option value="kling/v2-1-master-text-to-video">Kling v2.1 Master T2V</option>
-              <option value="bytedance/seedance-2">🌱 Seedance 2.0 (4–15s)</option>
+              <option value="bytedance/seedance-2">🌱 Seedance 2.0 [Start Frame]</option>
               <option value="kling/v2-1-standard">Kling v2.1 Standard [Start Frame]</option>
               <option value="kling/v2-1-pro">Kling v2.1 Pro [Start Frame] ⭐</option>
               <option value="kling/v2-1-master-image-to-video">Kling v2.1 Master [Start Frame]</option>
