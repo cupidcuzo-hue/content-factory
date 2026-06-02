@@ -32,6 +32,11 @@ GOOGLE_SA_JSON       = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON', '')
 GOOGLE_DRIVE_FOLDER  = os.environ.get('GOOGLE_DRIVE_FOLDER_ID', '')
 DB_PATH              = os.environ.get('DB_PATH', 'data/content_factory.db')
 
+# Public URL of this server — used to host start frames for KIE (since KIE file upload returns 404)
+# Railway sets RAILWAY_PUBLIC_DOMAIN automatically; fallback to known URL
+_railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN', 'content-factory-production-902b.up.railway.app')
+SERVER_URL = f'https://{_railway_domain}'
+
 # ── Flask / SocketIO ──────────────────────────────────────────────────────────
 
 app = Flask(__name__)
@@ -648,24 +653,32 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
     kie_model = KIE_TIER_MAP.get(model, model)
     cost_per = VIDEO_COSTS.get(kie_model, VIDEO_COSTS.get(model, 0.250))
 
-    # If a base64 start frame was sent, upload it to KIE file storage first
+    # If a base64 start frame was sent, host it on our own server so KIE can fetch it.
+    # KIE's file-base64-upload endpoint returns 404 — self-hosting is the reliable alternative.
     if image_b64 and not image_url:
         try:
-            log.info(f"[{job_id}] Uploading base64 start frame to KIE file storage…")
-            image_url = upload_to_kie(image_b64)
-            log.info(f"[{job_id}] Start frame uploaded: {image_url}")
+            import base64 as _b64
+            raw = image_b64.split(',', 1)[1] if (',' in image_b64 and image_b64.startswith('data:')) else image_b64
+            img_bytes = _b64.b64decode(raw)
+            temp_id = f'sf_{job_id}'
+            cache_img(temp_id, img_bytes)
+            image_url = f'{SERVER_URL}/api/img/{temp_id}'
+            log.info(f"[{job_id}] Start frame hosted at {image_url}")
         except Exception as e:
-            log.warning(f"[{job_id}] KIE file upload failed: {e} — continuing without start frame")
-            emit_to(socket_id, 'job:progress', {'job_id': job_id, 'msg': f'Frame upload failed: {e} — generating without it'})
+            log.warning(f"[{job_id}] Start frame host failed: {e} — generating without start frame")
 
-    # Upload tail (end) frame if provided as base64
+    # Same for tail (end) frame
     if tail_image_b64 and not tail_image_url:
         try:
-            log.info(f"[{job_id}] Uploading base64 end frame to KIE file storage…")
-            tail_image_url = upload_to_kie(tail_image_b64)
-            log.info(f"[{job_id}] End frame uploaded: {tail_image_url}")
+            import base64 as _b64
+            raw = tail_image_b64.split(',', 1)[1] if (',' in tail_image_b64 and tail_image_b64.startswith('data:')) else tail_image_b64
+            img_bytes = _b64.b64decode(raw)
+            temp_id = f'ef_{job_id}'
+            cache_img(temp_id, img_bytes)
+            tail_image_url = f'{SERVER_URL}/api/img/{temp_id}'
+            log.info(f"[{job_id}] End frame hosted at {tail_image_url}")
         except Exception as e:
-            log.warning(f"[{job_id}] KIE end frame upload failed: {e} — ignoring end frame")
+            log.warning(f"[{job_id}] End frame host failed: {e} — ignoring end frame")
 
     is_motion_control = mc_input_urls or mc_video_urls
 
@@ -855,14 +868,18 @@ def gen_video_laozhang(job_id: str, prompt: str, model: str, duration: str,
     cost_per = LAOZHANG_VIDEO_COSTS.get(model, 0.15)
     headers = {'Authorization': f'Bearer {LAOZHANG_API_KEY}', 'Content-Type': 'application/json'}
 
-    # Upload base64 start frame to KIE file storage if provided (Bug 2)
+    # Host start frame on our own server so Laozhang can fetch it
     if image_b64 and not image_url:
         try:
-            log.info(f"[{job_id}] Uploading base64 start frame to KIE file storage (for Laozhang)…")
-            image_url = upload_to_kie(image_b64)
-            log.info(f"[{job_id}] Start frame uploaded: {image_url}")
+            import base64 as _b64
+            raw = image_b64.split(',', 1)[1] if (',' in image_b64 and image_b64.startswith('data:')) else image_b64
+            img_bytes = _b64.b64decode(raw)
+            temp_id = f'sf_{job_id}'
+            cache_img(temp_id, img_bytes)
+            image_url = f'{SERVER_URL}/api/img/{temp_id}'
+            log.info(f"[{job_id}] Start frame hosted at {image_url}")
         except Exception as e:
-            log.warning(f"[{job_id}] KIE file upload failed for Laozhang: {e} — continuing without start frame")
+            log.warning(f"[{job_id}] Start frame host failed for Laozhang: {e} — continuing without start frame")
 
     emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Submitting to Laozhang…', 'pct': 5})
 
@@ -1569,9 +1586,8 @@ def api_debug_kie_video_poll():
 
 @app.route('/api/debug/kie-upload')
 def api_debug_kie_upload():
-    """Test upload_to_kie() with a real 1x1 JPEG — confirms file upload works end-to-end."""
-    import base64
-    # Minimal valid 1x1 red JPEG (no data: prefix — raw base64)
+    """Test self-hosted start frame flow — hosts a tiny image and returns the public URL."""
+    import base64 as _b64
     tiny_jpeg_b64 = (
         '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDB'
         'kSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAAR'
@@ -1579,14 +1595,18 @@ def api_debug_kie_upload():
         'AAAAAAAAAAAAAP/EABQBAQAAAAAAAAAAAAAAAAAAAAD/xAAUEQEAAAAAAAAAAAAA'
         'AAAAAAAP/aAAwDAQACEQMRAD8AJQAB/9k='
     )
-    key_hint = (KIE_API_KEY[:8] + '…') if KIE_API_KEY else 'NOT SET'
     try:
-        url = upload_to_kie(tiny_jpeg_b64)
-        return jsonify({'ok': True, 'key_hint': key_hint, 'uploaded_url': url,
-                        'note': 'File upload works — KIE CDN URL returned'})
+        img_bytes = _b64.b64decode(tiny_jpeg_b64)
+        cache_img('debug_sf_test', img_bytes)
+        hosted_url = f'{SERVER_URL}/api/img/debug_sf_test'
+        # Verify KIE can reach it
+        r = requests.get(hosted_url, timeout=10)
+        return jsonify({'ok': True, 'hosted_url': hosted_url,
+                        'reachable': r.status_code == 200,
+                        'server_url': SERVER_URL,
+                        'note': 'Self-hosted start frame approach — no KIE upload API needed'})
     except Exception as e:
-        return jsonify({'ok': False, 'key_hint': key_hint, 'error': str(e),
-                        'note': 'File upload FAILED — this is why start frames are ignored'}), 500
+        return jsonify({'ok': False, 'error': str(e)}), 500
 
 
 @app.route('/api/debug/kie-task-status')
