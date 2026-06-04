@@ -319,12 +319,20 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
 
 <!-- PASSWORD GATE -->
 <div id="gate">
-  <div class="gate-card">
+  <!-- Step 1: password -->
+  <div id="gate-pw" class="gate-card">
     <div class="gate-logo">Cuzo</div>
     <div class="gate-sub">Content Factory</div>
     <input type="password" id="gi" class="gate-input" placeholder="Enter password" autocomplete="off" onkeydown="if(event.key==='Enter')tryGate()">
     <button type="button" class="gate-btn" id="gbtn" onclick="tryGate()">Enter Dashboard</button>
     <div class="gate-err" id="gerr"></div>
+  </div>
+  <!-- Step 2: who's using? -->
+  <div id="gate-op" class="gate-card" style="display:none">
+    <div class="gate-logo">Cuzo</div>
+    <div class="gate-sub" style="margin-bottom:24px">Who's generating today?</div>
+    <div id="gate-op-pills" style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:20px"></div>
+    <button type="button" class="gate-btn" style="background:#111;color:#666;border:1px solid #222;margin-top:4px" onclick="pickOperator('')">Skip</button>
   </div>
 </div>
 
@@ -342,6 +350,10 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
     <div class="topbar-logo">Cuzo <span id="topbar-title">Content Factory</span></div>
     <div class="topbar-stat"><div id="api-dot"></div><span id="api-txt">No key</span></div>
     <div class="topbar-stat">Today: <strong id="today-cost">~$0.00</strong></div>
+    <div id="op-pill" class="topbar-stat" style="cursor:pointer;position:relative" onclick="toggleOpPicker()">
+      👤 <span id="op-pill-name" style="color:var(--gold)">—</span>
+      <div id="op-picker" style="display:none;position:absolute;top:36px;left:0;background:#0e0e0e;border:1px solid #222;border-radius:8px;padding:8px;min-width:140px;z-index:999;box-shadow:0 8px 32px rgba(0,0,0,.8)"></div>
+    </div>
     <div id="cuzo-sync-chip" class="topbar-stat" style="cursor:pointer;display:none" onclick="openSettings();setTimeout(()=>document.getElementById('cuzo-url')&&document.getElementById('cuzo-url').scrollIntoView({behavior:'smooth'}),300)">
       <div id="cuzo-sync-dot" style="width:7px;height:7px;border-radius:50%;background:var(--muted)"></div>
       <span id="cuzo-sync-txt">Cuzo</span>
@@ -359,17 +371,20 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
   </div>
 
   <!-- COST TRACKER PANEL -->
-  <div id="cost-tracker" style="display:none;background:#050505;border-bottom:1px solid #1a1a1a;padding:8px 16px;font-size:11px;font-family:monospace;color:#666">
-    <span style="color:#C9A84C;font-weight:700;margin-right:12px">COST TRACKER</span>
-    <span id="ct-week-img"></span>
-    <span style="margin:0 8px;opacity:0.3">·</span>
-    <span id="ct-week-vid"></span>
-    <span style="margin:0 8px;opacity:0.3">·</span>
-    <span id="ct-total" style="color:#C9A84C"></span>
-    <span style="margin:0 8px;opacity:0.3">·</span>
-    <span id="ct-proj" style="color:#888"></span>
-    <button onclick="loadCostTracker()" style="margin-left:12px;background:none;border:1px solid #222;color:#555;font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer">↻</button>
-    <button onclick="$('cost-tracker').style.display='none'" style="margin-left:4px;background:none;border:none;color:#444;font-size:13px;cursor:pointer">✕</button>
+  <div id="cost-tracker" style="display:none;background:#050505;border-bottom:1px solid #1a1a1a;padding:10px 16px;font-size:11px;font-family:monospace;color:#666">
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:6px">
+      <span style="color:#C9A84C;font-weight:700">COST TRACKER</span>
+      <span id="ct-week-img"></span>
+      <span style="opacity:0.3">·</span>
+      <span id="ct-week-vid"></span>
+      <span style="opacity:0.3">·</span>
+      <span id="ct-total" style="color:#C9A84C"></span>
+      <span style="opacity:0.3">·</span>
+      <span id="ct-proj" style="color:#888"></span>
+      <button onclick="loadCostTracker()" style="background:none;border:1px solid #222;color:#555;font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer">↻</button>
+      <button onclick="$('cost-tracker').style.display='none'" style="background:none;border:none;color:#444;font-size:13px;cursor:pointer">✕</button>
+    </div>
+    <div id="ct-by-op" style="display:flex;flex-wrap:wrap;gap:10px"></div>
   </div>
 
   <!-- MODEL BAR -->
@@ -875,9 +890,10 @@ function initSocket() {
       }
     });
 
-    socket.on('cost:update', ({today_total}) => {
+    socket.on('cost:update', ({today_total, by_operator}) => {
       const el = $('today-cost');
       if (el) el.textContent = '~$' + today_total.toFixed(2);
+      if (by_operator && $('cost-tracker').style.display !== 'none') renderByOperator(by_operator);
     });
 
     let _reconnectTimer = null;
@@ -1126,15 +1142,73 @@ function ratCls(r) {
   return {' 9:16':'', ' 3:4':' r34', ' 1:1':' r11', ' 16:9':' r169', ' 4:3':' r169', ' 21:9':' r169'}[' '+r] || '';
 }
 
+// ── OPERATORS ──
+const DEFAULT_OPERATORS = ['Cuzo','Gus'];
+function loadOperators() {
+  try { const s=localStorage.getItem('cuzo_operators'); if(s) return JSON.parse(s); } catch(_){}
+  return [...DEFAULT_OPERATORS];
+}
+function saveOperators(ops) { localStorage.setItem('cuzo_operators', JSON.stringify(ops)); }
+let OPERATORS = loadOperators();
+let currentOperator = localStorage.getItem('cuzo_operator') || '';
+
+function setOperator(name) {
+  currentOperator = name;
+  localStorage.setItem('cuzo_operator', name);
+  const pill = $('op-pill-name'); if(pill) pill.textContent = name || '—';
+}
+
+function pickOperator(name) {
+  setOperator(name);
+  $('gate').classList.add('hidden');
+  $('app').classList.remove('hidden');
+  initApp();
+}
+
+function buildOpPicker(containerId) {
+  const c = $(containerId); if(!c) return;
+  c.innerHTML = '';
+  OPERATORS.forEach(op => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = op;
+    btn.style.cssText = 'padding:10px 20px;border-radius:8px;border:1.5px solid #333;background:#111;color:#fff;font-size:14px;cursor:pointer;font-family:Inter,sans-serif;transition:all .15s';
+    btn.onmouseover = () => { btn.style.borderColor='#C9A84C'; btn.style.color='#C9A84C'; };
+    btn.onmouseout  = () => { btn.style.borderColor='#333';    btn.style.color='#fff'; };
+    btn.onclick = () => { if(containerId==='gate-op-pills') pickOperator(op); else { setOperator(op); toggleOpPicker(); } };
+    c.appendChild(btn);
+  });
+}
+
+function toggleOpPicker() {
+  const picker = $('op-picker'); if(!picker) return;
+  const open = picker.style.display !== 'none';
+  if(open) { picker.style.display='none'; return; }
+  buildOpPicker('op-picker');
+  // Add "None" option
+  const none = document.createElement('button');
+  none.textContent = '— None —';
+  none.style.cssText = 'width:100%;padding:6px 10px;margin-top:6px;border-radius:6px;border:1px solid #222;background:none;color:#555;font-size:11px;cursor:pointer;font-family:Inter,sans-serif';
+  none.onclick = () => { setOperator(''); toggleOpPicker(); };
+  $('op-picker').appendChild(none);
+  picker.style.display = 'block';
+}
+// Close picker on outside click
+document.addEventListener('click', e => {
+  const pill = $('op-pill');
+  if(pill && !pill.contains(e.target)) { const p=$('op-picker'); if(p) p.style.display='none'; }
+});
+
 // ── GATE ──
 function tryGate() {
   const v = document.getElementById('gi').value;
   const correct = localStorage.getItem('cuzo_password') || 'Cuzo.123';
   if (v === correct) {
     localStorage.setItem('cuzo_auth','1');
-    document.getElementById('gate').classList.add('hidden');
-    document.getElementById('app').classList.remove('hidden');
-    initApp();
+    // Show operator picker step
+    $('gate-pw').style.display='none';
+    buildOpPicker('gate-op-pills');
+    $('gate-op').style.display='';
   } else {
     const inp = document.getElementById('gi');
     const err = document.getElementById('gerr');
@@ -1171,6 +1245,8 @@ function initApp() {
   if (getCuzoJwt()) syncModelsFromCuzo(false);
   setImageProvider('kie'); // KIE default — Laozhang currently needs account top-up
   setVideoProvider('kie'); // initialises mode row visibility
+  // Init operator pill in topbar
+  const pill = $('op-pill-name'); if(pill) pill.textContent = currentOperator || '—';
 }
 
 // ── MODEL BAR ──
@@ -1632,12 +1708,18 @@ function updateCostPreviews() {
   if($('mc-cp')) $('mc-cp').innerHTML=`Est. cost: <strong>~${f$(getCost(mcm))}</strong> per generation`;
 }
 
-async function updateCostDisplay() {
+async function updateCostDisplay(by_operator_data) {
+  // If called from socket event with fresh data, update inline without a fetch
+  if (by_operator_data) {
+    renderByOperator(by_operator_data);
+    return;
+  }
   try {
     const r = await fetch(BASE_URL+'/api/costs/summary');
     if (!r.ok) throw new Error('no backend');
     const d = await r.json();
     $('today-cost').textContent = '~$' + (d.today || 0).toFixed(2);
+    if($('cost-tracker').style.display !== 'none') renderByOperator(d.by_operator);
   } catch {
     // Fallback to localStorage if backend not reachable
     const hist=JSON.parse(localStorage.getItem('cuzo_history')||'[]');
@@ -1645,6 +1727,18 @@ async function updateCostDisplay() {
     const sum=hist.filter(h=>new Date(h.timestamp).toDateString()===today).reduce((s,h)=>s+(h.estimatedCost||0),0);
     $('today-cost').textContent='~'+f$(sum);
   }
+}
+
+function renderByOperator(by_operator) {
+  const c = $('ct-by-op'); if(!c) return;
+  if(!by_operator || !Object.keys(by_operator).length){c.innerHTML='';return;}
+  c.innerHTML = Object.entries(by_operator).sort((a,b)=>b[1].today-a[1].today).map(([name,d])=>`
+    <span style="background:#0a0a0a;border:1px solid #1a1a1a;border-radius:6px;padding:4px 10px;white-space:nowrap">
+      <span style="color:#C9A84C;font-weight:600">${esc(name)}</span>
+      <span style="margin-left:8px;color:#aaa">today <strong style="color:#fff">$${(d.today||0).toFixed(2)}</strong></span>
+      <span style="margin-left:6px;color:#555">wk $${(d.week||0).toFixed(2)}</span>
+      <span style="margin-left:6px;color:#444">${d.week_images||0}img ${d.week_videos||0}vid</span>
+    </span>`).join('');
 }
 
 async function loadCostTracker() {
@@ -1659,6 +1753,7 @@ async function loadCostTracker() {
     $('ct-total').textContent     = `Week total: $${d.week.toFixed(2)}`;
     $('ct-proj').textContent      = `~$${d.projection_monthly.toFixed(2)}/mo est.`;
     $('today-cost').textContent   = '~$' + (d.today || 0).toFixed(2);
+    renderByOperator(d.by_operator);
   } catch(e) {
     $('ct-week-img').textContent = 'Backend not connected';
     $('ct-week-vid').textContent = '';
@@ -1865,6 +1960,7 @@ async function genMc(mid) {
       mc_video_urls: [videoUrl],
       mc_orientation: model!=='kling-3.0/motion-control' ? orient : null,
       mode,
+      operator: currentOperator,
       model_name: m?.name||mid,
       socket_id: socket?.id || ''
     })
@@ -1904,7 +2000,7 @@ async function genSd(mid) {
   }
   const res = (imageProvider === 'laozhang' && $('sd-q').value === 'high') ? '4K' : '2K';
   fetch(BASE_URL+'/api/generate/image/batch',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({job_ids,prompt:apiPrompt,provider:imageProvider,model,resolution:res,ratio,model_name:m?.name||mid,ref_urls:refUrls,negative_prompt:negPrompt,socket_id:socket?.id||''})
+    body:JSON.stringify({job_ids,prompt:apiPrompt,provider:imageProvider,model,resolution:res,ratio,model_name:m?.name||mid,ref_urls:refUrls,negative_prompt:negPrompt,operator:currentOperator,socket_id:socket?.id||''})
   }).catch(e=>{ job_ids.forEach(cid=>{pendingJobs.delete(cid);failCard(cid,e.message||'Submit failed');}); });
   btn.disabled=false; btn.textContent='Generate';
 }
@@ -1949,7 +2045,7 @@ async function genVi(mid) {
     // End frame only supported on v2.1 Pro
     const tailB64 = (model === 'kling/v2-1-pro') ? (viEndFrameB64 || null) : null;
     fetch(BASE_URL+'/api/generate/video',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({job_id:cid,prompt:apiPrompt,model,provider:videoProvider,duration:dur,ratio,image_b64:startFrameB64,tail_image_b64:tailB64,mode:sendMode?viMode:null,sound,multi_shots:multiShot,negative_prompt:negPrompt,model_name:m?.name||mid,socket_id:socket?.id||''})
+      body:JSON.stringify({job_id:cid,prompt:apiPrompt,model,provider:videoProvider,duration:dur,ratio,image_b64:startFrameB64,tail_image_b64:tailB64,mode:sendMode?viMode:null,sound,multi_shots:multiShot,negative_prompt:negPrompt,operator:currentOperator,model_name:m?.name||mid,socket_id:socket?.id||''})
     }).catch(e=>{ pendingJobs.delete(cid); failCard(cid,e.message||'Submit failed'); });
   }
   btn.disabled=false; btn.textContent='Generate';

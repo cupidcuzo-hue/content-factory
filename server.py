@@ -98,6 +98,13 @@ def init_db():
                 )
             ''')
             db.commit()
+            # Migration: add operator column if missing
+            try:
+                db.execute("ALTER TABLE cost_log ADD COLUMN operator TEXT DEFAULT ''")
+                db.commit()
+                log.info("DB migration: added operator column to cost_log")
+            except Exception:
+                pass  # Column already exists
         log.info(f"Database ready at {_DB_PATH}")
     except Exception as e:
         # Fall back to an in-process temp DB rather than crashing the server
@@ -115,6 +122,11 @@ def init_db():
                     )
                 ''')
                 db.commit()
+                try:
+                    db.execute("ALTER TABLE cost_log ADD COLUMN operator TEXT DEFAULT ''")
+                    db.commit()
+                except Exception:
+                    pass
             log.info(f"Database ready (fallback) at {_DB_PATH}")
         except Exception as e2:
             log.error(f"Fallback DB also failed: {e2} — cost tracking disabled")
@@ -280,15 +292,26 @@ KIE_BASE = 'https://api.kie.ai/api/v1/jobs'
 
 # ── Cost helpers ──────────────────────────────────────────────────────────────
 
-def log_cost(job_id, provider, model, content_type, model_name, cost_per_unit, quantity=1):
+def log_cost(job_id, provider, model, content_type, model_name, cost_per_unit, quantity=1, operator=''):
     total = round(cost_per_unit * quantity, 6)
     with get_db() as db:
         db.execute(
-            'INSERT INTO cost_log (job_id,provider,model,content_type,model_name,quantity,cost_per_unit,total_cost) VALUES (?,?,?,?,?,?,?,?)',
-            (job_id, provider, model, content_type, model_name, quantity, cost_per_unit, total)
+            'INSERT INTO cost_log (job_id,provider,model,content_type,model_name,quantity,cost_per_unit,total_cost,operator) VALUES (?,?,?,?,?,?,?,?,?)',
+            (job_id, provider, model, content_type, model_name, quantity, cost_per_unit, total, operator or '')
         )
         db.commit()
     return total
+
+def operator_totals_today():
+    """Return per-operator spend for today — used in real-time cost:update events."""
+    today = datetime.date.today().isoformat()
+    with get_db() as db:
+        rows = db.execute(
+            "SELECT COALESCE(operator,'') op, COALESCE(SUM(total_cost),0) t "
+            "FROM cost_log WHERE date(generated_at)=? GROUP BY operator",
+            (today,)
+        ).fetchall()
+    return {(r['op'] or 'Unknown'): round(float(r['t']), 4) for r in rows}
 
 def today_total():
     today = datetime.date.today().isoformat()
@@ -370,7 +393,7 @@ def upload_to_drive(data: bytes, filename: str, mime_type: str) -> str:
 IMG_GEN_TIMEOUT = 90  # seconds — eventlet.Timeout kills hung requests reliably
 
 def gen_image(job_id: str, prompt: str, resolution: str, ratio: str,
-              model_name: str, ref_urls: list, socket_id: str, model: str = 'nano-banana-pro'):
+              model_name: str, ref_urls: list, socket_id: str, model: str = 'nano-banana-pro', operator: str = ''):
     """Generate image via Laozhang, emit result immediately, upload to Drive in background."""
     size = IMG_SIZE_MAP.get((ratio, resolution), '1024x1820')
     cost_per = LAOZHANG_MODEL_COSTS.get(model, LAOZHANG_COSTS.get(resolution, 0.025))
@@ -417,10 +440,10 @@ def gen_image(job_id: str, prompt: str, resolution: str, ratio: str,
         gen_image_kie(job_id, prompt, ratio, model_name, socket_id, model='nano-banana-pro', ref_urls=ref_urls or [])
         return
 
-    total_cost = log_cost(job_id, 'laozhang', model, 'image', model_name, cost_per)
+    total_cost = log_cost(job_id, 'laozhang', model, 'image', model_name, cost_per, operator=operator)
     emit_to(socket_id, 'job:complete', {'job_id': job_id, 'url': img_url, 'cost': total_cost, 'provider': 'laozhang'})
-    emit_to(socket_id, 'cost:update', {'today_total': today_total()})
-    log.info(f"Image job complete [{job_id}] cost=${total_cost:.4f}")
+    emit_to(socket_id, 'cost:update', {'today_total': today_total(), 'by_operator': operator_totals_today()})
+    log.info(f"Image job complete [{job_id}] cost=${total_cost:.4f} operator={operator}")
 
     if GOOGLE_SA_JSON and GOOGLE_DRIVE_FOLDER:
         date_str = datetime.date.today().strftime('%Y%m%d')
@@ -438,7 +461,7 @@ def gen_image(job_id: str, prompt: str, resolution: str, ratio: str,
 
 
 def gen_image_batch(job_ids: list, prompt: str, resolution: str, ratio: str,
-                    model_name: str, ref_urls: list, socket_id: str, model: str = 'nano-banana-pro'):
+                    model_name: str, ref_urls: list, socket_id: str, model: str = 'nano-banana-pro', operator: str = ''):
     """One Laozhang call with n=len(job_ids) — fastest possible batch image generation."""
     n = len(job_ids)
     size = IMG_SIZE_MAP.get((ratio, resolution), '1024x1820')
@@ -517,13 +540,13 @@ def gen_image_batch(job_ids: list, prompt: str, resolution: str, ratio: str,
         if not img_url:
             emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'Laozhang returned no image URL — try again'})
             continue
-        total_cost = log_cost(job_id, 'laozhang', model, 'image', model_name, cost_per)
+        total_cost = log_cost(job_id, 'laozhang', model, 'image', model_name, cost_per, operator=operator)
         emit_to(socket_id, 'job:complete', {
             'job_id': job_id, 'url': img_url, 'cost': total_cost, 'provider': 'laozhang'
         })
-        log.info(f"Batch image complete [{job_id}] cost=${total_cost:.4f}")
+        log.info(f"Batch image complete [{job_id}] cost=${total_cost:.4f} operator={operator}")
 
-    emit_to(socket_id, 'cost:update', {'today_total': today_total()})
+    emit_to(socket_id, 'cost:update', {'today_total': today_total(), 'by_operator': operator_totals_today()})
 
     # Drive uploads in background — use cached bytes for b64 images to avoid relative-URL issue
     if GOOGLE_SA_JSON and GOOGLE_DRIVE_FOLDER:
@@ -645,7 +668,7 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
               mc_orientation: str | None = None, sound: bool = False,
               multi_shots: bool = False, image_b64: str | None = None,
               tail_image_b64: str | None = None, tail_image_url: str | None = None,
-              negative_prompt: str = ''):
+              negative_prompt: str = '', operator: str = ''):
     """Generate video via KIE.ai, upload to Drive, log cost.
     Motion control mode: pass mc_input_urls + mc_video_urls instead of prompt/duration.
     """
@@ -823,12 +846,12 @@ def gen_video(job_id: str, prompt: str, model: str, duration: str, ratio: str,
         return
 
     # Emit IMMEDIATELY — user sees result now, no waiting for Drive
-    total_cost = log_cost(job_id, 'kie', kie_model, 'video', model_name, cost_per)
+    total_cost = log_cost(job_id, 'kie', kie_model, 'video', model_name, cost_per, operator=operator)
     emit_to(socket_id, 'job:complete', {
         'job_id': job_id, 'url': video_url, 'cost': total_cost, 'provider': 'kie'
     })
-    emit_to(socket_id, 'cost:update', {'today_total': today_total()})
-    log.info(f"Video job complete [{job_id}] cost=${total_cost:.4f}")
+    emit_to(socket_id, 'cost:update', {'today_total': today_total(), 'by_operator': operator_totals_today()})
+    log.info(f"Video job complete [{job_id}] cost=${total_cost:.4f} operator={operator}")
 
     # Drive upload in background — never blocks the user
     if GOOGLE_SA_JSON and GOOGLE_DRIVE_FOLDER:
@@ -860,7 +883,7 @@ def _parse_lz_video_url(d: dict) -> str | None:
 
 def gen_video_laozhang(job_id: str, prompt: str, model: str, duration: str,
                        ratio: str, image_url: str | None, socket_id: str,
-                       model_name: str = 'unknown', image_b64: str | None = None):
+                       model_name: str = 'unknown', image_b64: str | None = None, operator: str = ''):
     """Generate video via Laozhang.ai.
     Handles both sync (URL in first response) and async (task ID + polling) APIs.
     Wan 2.1 and Kling models both supported.
@@ -965,12 +988,12 @@ def gen_video_laozhang(job_id: str, prompt: str, model: str, duration: str,
             return
 
     # ── Done ──────────────────────────────────────────────────────────────────
-    total_cost = log_cost(job_id, 'laozhang', model, 'video', model_name, cost_per)
+    total_cost = log_cost(job_id, 'laozhang', model, 'video', model_name, cost_per, operator=operator)
     emit_to(socket_id, 'job:complete', {
         'job_id': job_id, 'url': video_url, 'cost': total_cost, 'provider': 'laozhang'
     })
-    emit_to(socket_id, 'cost:update', {'today_total': today_total()})
-    log.info(f"Laozhang video complete [{job_id}] cost=${total_cost:.4f}")
+    emit_to(socket_id, 'cost:update', {'today_total': today_total(), 'by_operator': operator_totals_today()})
+    log.info(f"Laozhang video complete [{job_id}] cost=${total_cost:.4f} operator={operator}")
 
     if GOOGLE_SA_JSON and GOOGLE_DRIVE_FOLDER:
         date_str = datetime.date.today().strftime('%Y%m%d')
@@ -988,7 +1011,7 @@ def gen_video_laozhang(job_id: str, prompt: str, model: str, duration: str,
 # ── Sora 2 video via Laozhang async /v1/videos endpoint ──────────────────────
 
 def gen_video_sora2(job_id: str, prompt: str, model: str, duration: str,
-                    ratio: str, model_name: str, socket_id: str):
+                    ratio: str, model_name: str, socket_id: str, operator: str = ''):
     """Generate video via Laozhang's async /v1/videos endpoint (Sora 2).
     No charge on failure — safe to call without worry.
     """
@@ -1047,10 +1070,10 @@ def gen_video_sora2(job_id: str, prompt: str, model: str, duration: str,
         emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'Sora 2 timed out after 12 min'})
         return
 
-    total_cost = log_cost(job_id, 'laozhang', model, 'video', model_name, cost_per)
+    total_cost = log_cost(job_id, 'laozhang', model, 'video', model_name, cost_per, operator=operator)
     emit_to(socket_id, 'job:complete', {'job_id': job_id, 'url': video_url, 'cost': total_cost, 'provider': 'laozhang'})
-    emit_to(socket_id, 'cost:update', {'today_total': today_total()})
-    log.info(f"Sora2 video complete [{job_id}] cost=${total_cost:.4f}")
+    emit_to(socket_id, 'cost:update', {'today_total': today_total(), 'by_operator': operator_totals_today()})
+    log.info(f"Sora2 video complete [{job_id}] cost=${total_cost:.4f} operator={operator}")
 
 
 # ── Image generation via KIE.ai ──────────────────────────────────────────────
@@ -1089,7 +1112,7 @@ def _kie_extract_image_url(result: dict) -> str | None:
 
 
 def gen_image_kie(job_id: str, prompt: str, ratio: str, model_name: str,
-                  socket_id: str, model: str = 'nano-banana-pro', ref_urls: list | None = None):
+                  socket_id: str, model: str = 'nano-banana-pro', ref_urls: list | None = None, operator: str = ''):
     """Generate image via KIE.ai, emit result on completion."""
     cost_per = KIE_IMAGE_COSTS.get(model, 0.040)
     headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
@@ -1144,10 +1167,10 @@ def gen_image_kie(job_id: str, prompt: str, ratio: str, model_name: str,
                     log.error(f"KIE image success but no URL [{job_id}]: {json.dumps(raw)[:500]}")
                     emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'KIE returned success but no image URL — check logs'})
                     return
-                total_cost = log_cost(job_id, 'kie', model, 'image', model_name, cost_per)
+                total_cost = log_cost(job_id, 'kie', model, 'image', model_name, cost_per, operator=operator)
                 emit_to(socket_id, 'job:complete', {'job_id': job_id, 'url': img_url, 'cost': total_cost, 'provider': 'kie'})
-                emit_to(socket_id, 'cost:update', {'today_total': today_total()})
-                log.info(f"KIE image complete [{job_id}] cost=${total_cost:.4f} url={img_url[:60]}")
+                emit_to(socket_id, 'cost:update', {'today_total': today_total(), 'by_operator': operator_totals_today()})
+                log.info(f"KIE image complete [{job_id}] cost=${total_cost:.4f} url={img_url[:60]} operator={operator}")
                 return
             elif state in ('fail', 'failed', 'error'):
                 err = raw.get('failReason') or raw.get('failMsg') or raw.get('error') or 'KIE generation failed'
@@ -1184,6 +1207,7 @@ def api_gen_image():
         model_name=d.get('model_name', 'unknown'),
         ref_urls=d.get('ref_urls', []),
         socket_id=d.get('socket_id', ''),
+        operator=d.get('operator', ''),
     ))
     t.start()
     return jsonify({'ok': True, 'job_id': d['job_id']})
@@ -1201,6 +1225,7 @@ def api_gen_image_batch():
     if neg:
         prompt = f"{prompt} [avoid: {neg}]"
 
+    op = d.get('operator', '')
     if provider == 'kie':
         # KIE doesn't batch — fire one thread per image, all in parallel
         for job_id in job_ids:
@@ -1212,6 +1237,7 @@ def api_gen_image_batch():
                 model_name=d.get('model_name', 'unknown'),
                 socket_id=d.get('socket_id', ''),
                 ref_urls=d.get('ref_urls', []),
+                operator=op,
             )).start()
     else:
         # Laozhang: one API call with n=count
@@ -1224,6 +1250,7 @@ def api_gen_image_batch():
             model_name=d.get('model_name', 'unknown'),
             ref_urls=d.get('ref_urls', []),
             socket_id=d.get('socket_id', ''),
+            operator=op,
         )).start()
 
     return jsonify({'ok': True, 'job_ids': job_ids})
@@ -1234,8 +1261,9 @@ def api_gen_video():
     d = request.get_json(force=True)
     provider = d.get('provider', 'kie')
 
+    op = d.get('operator', '')
     if provider == 'laozhang':
-        model_lz = d.get('model', 'wan2.1-14b-720p')
+        model_lz = d.get('model', 'wan2.1-i2v-14b-720p')
         if model_lz in ('sora-2', 'sora-2-pro'):
             # Sora 2 uses separate async /v1/videos endpoint
             t = threading.Thread(target=gen_video_sora2, daemon=True, kwargs=dict(
@@ -1246,6 +1274,7 @@ def api_gen_video():
                 ratio=d.get('ratio', '9:16'),
                 model_name=d.get('model_name', 'unknown'),
                 socket_id=d.get('socket_id', ''),
+                operator=op,
             ))
         else:
             t = threading.Thread(target=gen_video_laozhang, daemon=True, kwargs=dict(
@@ -1258,6 +1287,7 @@ def api_gen_video():
                 image_b64=d.get('image_b64'),
                 model_name=d.get('model_name', 'unknown'),
                 socket_id=d.get('socket_id', ''),
+                operator=op,
             ))
     else:
         t = threading.Thread(target=gen_video, daemon=True, kwargs=dict(
@@ -1279,6 +1309,7 @@ def api_gen_video():
             sound=bool(d.get('sound', False)),
             multi_shots=bool(d.get('multi_shots', False)),
             negative_prompt=d.get('negative_prompt', ''),
+            operator=op,
         ))
     t.start()
     return jsonify({'ok': True, 'job_id': d['job_id']})
@@ -1333,12 +1364,35 @@ def api_costs_summary():
             "SELECT COALESCE(SUM(total_cost),0) t, COUNT(*) c FROM cost_log "
             "WHERE date(generated_at) >= ? AND content_type='video'", (week_start,)).fetchone()
 
+        # Per-operator breakdown
+        op_rows = db.execute(
+            "SELECT COALESCE(operator,'') op, "
+            "COALESCE(SUM(CASE WHEN date(generated_at)=? THEN total_cost ELSE 0 END),0) today_cost, "
+            "COALESCE(SUM(CASE WHEN date(generated_at)>=? THEN total_cost ELSE 0 END),0) week_cost, "
+            "COALESCE(SUM(CASE WHEN date(generated_at)>=? THEN total_cost ELSE 0 END),0) month_cost, "
+            "COUNT(CASE WHEN date(generated_at)>=? AND content_type='image' THEN 1 END) week_images, "
+            "COUNT(CASE WHEN date(generated_at)>=? AND content_type='video' THEN 1 END) week_videos "
+            "FROM cost_log GROUP BY operator",
+            (today, week_start, month_start, week_start, week_start)
+        ).fetchall()
+        by_operator = {}
+        for r in op_rows:
+            name = r['op'] or 'Unknown'
+            by_operator[name] = {
+                'today': round(float(r['today_cost']), 4),
+                'week':  round(float(r['week_cost']), 4),
+                'month': round(float(r['month_cost']), 4),
+                'week_images': r['week_images'] or 0,
+                'week_videos': r['week_videos'] or 0,
+            }
+
     return jsonify({
         'today': td,
         'week':  wk,
         'month': mo,
         'projection_monthly': projection,
         'by_model': by_model,
+        'by_operator': by_operator,
         'week_images': {'count': wk_img['c'], 'cost': round(float(wk_img['t']), 4)},
         'week_videos': {'count': wk_vid['c'], 'cost': round(float(wk_vid['t']), 4)},
     })
