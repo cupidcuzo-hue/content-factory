@@ -205,6 +205,56 @@ LAOZHANG_VIDEO_COSTS = {
     'sora-2-pro':               0.800,
 }
 
+# ── Wan Animate costs (per KIE pricing — verify at KIE.ai dashboard) ──────────
+WAN_ANIMATE_COSTS = {
+    'wan/2-2-animate-move':    0.25,
+    'wan/2-2-animate-replace': 0.30,
+}
+
+# ── Upscale costs ─────────────────────────────────────────────────────────────
+UPSCALE_COSTS = {
+    'topaz/image-upscale':    0.03,
+    'seedvr/video-upscale-4k': 0.15,
+}
+
+# ── Model catalogs (served at /api/models/catalog for frontend cost estimates) ─
+IMAGE_MODELS = {
+    "nanobanana_pro": {"endpoint": "nano-banana-pro",          "label": "NanoBanana Pro",
+                       "cost": {"1K": 0.02, "2K": 0.04, "4K": 0.07}},
+    "z_image_turbo":  {"endpoint": "z-image/turbo",           "label": "Z-Image Turbo",
+                       "cost": {"1K": 0.015, "2K": 0.02, "4K": 0.03}},
+    "z_image_spicy":  {"endpoint": "z-image/spicy",           "label": "Z-Image Spicy",
+                       "cost": {"1K": 0.03, "2K": 0.04, "4K": 0.06}},
+    "gpt_image_2":    {"endpoint": "openai/gpt-image-1.5",    "label": "GPT Image 2",
+                       "cost": {"1K": 0.06, "2K": 0.08, "4K": 0.10}},
+    "qwen_image":     {"endpoint": "qwen/image-edit",         "label": "Qwen Image Edit",
+                       "cost": {"1K": 0.05, "2K": 0.06, "4K": 0.09}},
+    "wan27_image":    {"endpoint": "alibaba/wan2.7-image",    "label": "Wan 2.7 Image",
+                       "cost": {"1K": 0.04, "2K": 0.05, "4K": 0.08}},
+    "seedream5_lite": {"endpoint": "bytedance/seedream5-lite", "label": "Seedream 5.0 Lite",
+                       "cost": {"1K": 0.05, "2K": 0.07, "4K": 0.10}},
+    "seedream45":     {"endpoint": "bytedance/seedream-v4-text-to-image", "label": "Seedream 4.5",
+                       "cost": {"1K": 0.03, "2K": 0.04, "4K": 0.07}},
+}
+
+VIDEO_MODELS_CATALOG = {
+    "kling21_standard": {"endpoint": "kling/v2-1-standard-image-to-video",
+                          "label": "Kling 2.1 Standard", "cost_5s": 0.125},
+    "kling21_pro":       {"endpoint": "kling/v2-1-pro-image-to-video",
+                          "label": "Kling 2.1 Pro",       "cost_5s": 0.25},
+    "kling21_master":    {"endpoint": "kling/v2-1-master-image-to-video",
+                          "label": "Kling 2.1 Master",    "cost_5s": 0.80},
+    "kling30":           {"endpoint": "kling-3.0/video",
+                          "label": "Kling 3.0",            "cost_5s": 0.50},
+    "wan27_video":       {"endpoint": "alibaba/wan2.7-video",
+                          "label": "Wan 2.7 (I2V)",        "cost_5s": 0.35},
+}
+
+UPSCALE_MODELS = {
+    "image_upscale": {"endpoint": "topaz/image-upscale",      "label": "Image Upscale 4K", "cost": 0.03},
+    "video_upscale": {"endpoint": "seedvr/video-upscale-4k",  "label": "Video Upscale 4K", "cost": 0.15},
+}
+
 # Sora 2 size mapping (portrait/landscape)
 SORA2_SIZE_MAP = {
     '9:16': '720x1280',
@@ -1183,6 +1233,78 @@ def gen_image_kie(job_id: str, prompt: str, ratio: str, model_name: str,
     emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': 'KIE image timed out after 5 min'})
 
 
+# ── Upscale via KIE ──────────────────────────────────────────────────────────
+
+def upscale_image_job(job_id: str, source_url: str, socket_id: str, operator: str = ''):
+    """Upscale an image to 4K via KIE topaz/image-upscale."""
+    headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
+    emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Upscaling image…', 'pct': 10})
+    result_url, err = _kie_submit_and_poll(job_id, 'topaz/image-upscale', {'image_url': source_url}, socket_id, headers)
+    if not result_url:
+        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'Image upscale failed: {err}'})
+        return
+    total_cost = log_cost(job_id, 'kie', 'topaz/image-upscale', 'upscale_image', 'Upscale 4K',
+                          UPSCALE_COSTS['topaz/image-upscale'], operator=operator)
+    emit_to(socket_id, 'job:complete', {'job_id': job_id, 'url': result_url, 'cost': total_cost, 'provider': 'kie'})
+    emit_to(socket_id, 'cost:update', {'today_total': today_total(), 'by_operator': operator_totals_today()})
+    log.info(f"Image upscale complete [{job_id}] cost=${total_cost:.4f}")
+
+
+def upscale_video_job(job_id: str, source_url: str, socket_id: str, operator: str = ''):
+    """Upscale a video to 4K via KIE seedvr/video-upscale-4k."""
+    headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
+    emit_to(socket_id, 'job:progress', {'job_id': job_id, 'status': 'Upscaling video…', 'pct': 10})
+    result_url, err = _kie_submit_and_poll(job_id, 'seedvr/video-upscale-4k', {'video_url': source_url}, socket_id, headers)
+    if not result_url:
+        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'Video upscale failed: {err}'})
+        return
+    total_cost = log_cost(job_id, 'kie', 'seedvr/video-upscale-4k', 'upscale_video', 'Upscale 4K',
+                          UPSCALE_COSTS['seedvr/video-upscale-4k'], operator=operator)
+    emit_to(socket_id, 'job:complete', {'job_id': job_id, 'url': result_url, 'cost': total_cost, 'provider': 'kie'})
+    emit_to(socket_id, 'cost:update', {'today_total': today_total(), 'by_operator': operator_totals_today()})
+    log.info(f"Video upscale complete [{job_id}] cost=${total_cost:.4f}")
+
+
+# ── Wan Animate Move + Replace via KIE ───────────────────────────────────────
+
+def wan_animate_job(job_id: str, model: str, image_url: str, video_url: str,
+                    resolution: str, model_name: str, socket_id: str, operator: str = ''):
+    """Animate or character-replace via KIE Wan 2.2 Animate models.
+    model: 'wan/2-2-animate-move' or 'wan/2-2-animate-replace'
+    image_url: public URL of the model photo (already uploaded by frontend)
+    video_url: public URL of the driving/source video (already uploaded by frontend)
+    """
+    headers = {'Authorization': f'Bearer {KIE_API_KEY}', 'Content-Type': 'application/json'}
+    payload_input = {'video_url': video_url, 'image_url': image_url, 'resolution': resolution}
+
+    result_url, err = _kie_submit_and_poll(job_id, model, payload_input, socket_id, headers)
+
+    if not result_url:
+        log.error(f"Wan Animate failed [{job_id}] model={model}: {err}")
+        emit_to(socket_id, 'job:failed', {'job_id': job_id, 'error': f'Wan Animate failed: {err}'})
+        return
+
+    content_type = 'wan_animate_move' if 'move' in model else 'wan_animate_replace'
+    cost_per = WAN_ANIMATE_COSTS.get(model, 0.25)
+    total_cost = log_cost(job_id, 'kie', model, content_type, model_name, cost_per, operator=operator)
+    emit_to(socket_id, 'job:complete', {'job_id': job_id, 'url': result_url, 'cost': total_cost, 'provider': 'kie'})
+    emit_to(socket_id, 'cost:update', {'today_total': today_total(), 'by_operator': operator_totals_today()})
+    log.info(f"Wan Animate complete [{job_id}] model={model} cost=${total_cost:.4f}")
+
+    if GOOGLE_SA_JSON and GOOGLE_DRIVE_FOLDER:
+        date_str = datetime.date.today().strftime('%Y%m%d')
+        safe_name = model_name.replace(' ', '_').lower()
+        atype = 'animate' if 'move' in model else 'replace'
+        fname = f"{safe_name}_{atype}_{date_str}_{job_id[:8]}.mp4"
+        def _bg_upload(url=result_url, fn=fname):
+            try:
+                vid_data = requests.get(url, timeout=120).content
+                upload_to_drive(vid_data, fn, 'video/mp4')
+            except Exception as ex:
+                log.warning(f"BG Drive upload failed [{job_id}]: {ex}")
+        threading.Thread(target=_bg_upload, daemon=True).start()
+
+
 # ── API Routes ────────────────────────────────────────────────────────────────
 
 @app.route('/')
@@ -1396,6 +1518,79 @@ def api_costs_summary():
         'week_images': {'count': wk_img['c'], 'cost': round(float(wk_img['t']), 4)},
         'week_videos': {'count': wk_vid['c'], 'cost': round(float(wk_vid['t']), 4)},
     })
+
+
+@app.route('/api/models/catalog', methods=['GET'])
+def api_models_catalog():
+    return jsonify({
+        'image_models':  IMAGE_MODELS,
+        'video_models':  VIDEO_MODELS_CATALOG,
+        'upscale_models': UPSCALE_MODELS,
+    })
+
+
+@app.route('/api/upscale/image', methods=['POST'])
+def api_upscale_image():
+    d = request.get_json(force=True)
+    job_id = d.get('job_id') or str(__import__('uuid').uuid4())
+    t = threading.Thread(target=upscale_image_job, daemon=True, kwargs=dict(
+        job_id=job_id,
+        source_url=d['source_url'],
+        socket_id=d.get('socket_id', ''),
+        operator=d.get('operator', ''),
+    ))
+    t.start()
+    return jsonify({'ok': True, 'job_id': job_id})
+
+
+@app.route('/api/upscale/video', methods=['POST'])
+def api_upscale_video():
+    d = request.get_json(force=True)
+    job_id = d.get('job_id') or str(__import__('uuid').uuid4())
+    t = threading.Thread(target=upscale_video_job, daemon=True, kwargs=dict(
+        job_id=job_id,
+        source_url=d['source_url'],
+        socket_id=d.get('socket_id', ''),
+        operator=d.get('operator', ''),
+    ))
+    t.start()
+    return jsonify({'ok': True, 'job_id': job_id})
+
+
+@app.route('/api/wan-animate/move', methods=['POST'])
+def api_wan_animate_move():
+    d = request.get_json(force=True)
+    job_id = d.get('job_id') or str(__import__('uuid').uuid4())
+    t = threading.Thread(target=wan_animate_job, daemon=True, kwargs=dict(
+        job_id=job_id,
+        model='wan/2-2-animate-move',
+        image_url=d['image_url'],
+        video_url=d['video_url'],
+        resolution=d.get('resolution', '720p'),
+        model_name=d.get('model_name', 'Unknown'),
+        socket_id=d.get('socket_id', ''),
+        operator=d.get('operator', ''),
+    ))
+    t.start()
+    return jsonify({'ok': True, 'job_id': job_id})
+
+
+@app.route('/api/wan-animate/replace', methods=['POST'])
+def api_wan_animate_replace():
+    d = request.get_json(force=True)
+    job_id = d.get('job_id') or str(__import__('uuid').uuid4())
+    t = threading.Thread(target=wan_animate_job, daemon=True, kwargs=dict(
+        job_id=job_id,
+        model='wan/2-2-animate-replace',
+        image_url=d['image_url'],
+        video_url=d['video_url'],
+        resolution=d.get('resolution', '720p'),
+        model_name=d.get('model_name', 'Unknown'),
+        socket_id=d.get('socket_id', ''),
+        operator=d.get('operator', ''),
+    ))
+    t.start()
+    return jsonify({'ok': True, 'job_id': job_id})
 
 
 @app.route('/api/costs/log')

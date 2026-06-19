@@ -440,10 +440,16 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
                 <option value="nano-banana-pro" selected>NanoBanana Pro ⚡</option>
                 <option value="nano-banana-2">NanoBanana 2</option>
                 <option value="google/nano-banana">NanoBanana</option>
+                <option value="z-image/turbo">Z-Image Turbo ⚡ ($0.02)</option>
+                <option value="z-image/spicy">Z-Image Spicy ($0.04)</option>
+                <option value="openai/gpt-image-1.5">GPT Image 2 [KIE] ($0.08)</option>
+                <option value="qwen/image-edit">Qwen Image Edit ($0.06)</option>
+                <option value="alibaba/wan2.7-image">Wan 2.7 Image ($0.05)</option>
+                <option value="bytedance/seedream5-lite">Seedream 5.0 Lite ($0.07)</option>
                 <option value="grok-imagine/text-to-image">Grok Imagine</option>
                 <option value="google/imagen4">Google Imagen 4</option>
                 <option value="google/imagen4-ultra">Google Imagen 4 Ultra</option>
-                <option value="gpt-image-2-text-to-image">GPT Image 2</option>
+                <option value="gpt-image-2-text-to-image">GPT Image 2 (old)</option>
               </optgroup>
               <optgroup label="── Laozhang ──">
                 <option value="gpt-image-2">GPT Image 2 ⚡</option>
@@ -507,6 +513,7 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
         <div class="stabs" style="margin-bottom:16px">
           <div class="stab active" data-vs="txt">Text to Video</div>
           <div class="stab" id="vs-mc-tab" data-vs="mc">Motion Control</div>
+          <div class="stab" id="vs-wan-tab" data-vs="wan">🕺 Wan Animate</div>
         </div>
 
         <!-- TEXT TO VIDEO -->
@@ -651,6 +658,82 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
           </div>
           <div id="mc-status" style="font-size:11px;color:var(--muted2);margin-bottom:10px;min-height:16px"></div>
           <button class="gen-btn" id="mc-gen">Generate Motion Control</button>
+        </div>
+
+        <!-- WAN ANIMATE MOVE + REPLACE -->
+        <div id="vs-wan" style="display:none">
+          <div class="info-chip" style="margin-bottom:12px">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Animate a model photo to perform a trend, or swap her into existing footage
+          </div>
+          <div class="stabs" id="wan-subtabs" style="margin-bottom:14px">
+            <div class="stab active" onclick="selWanMode('move',this)">🕺 Animate Move</div>
+            <div class="stab" onclick="selWanMode('replace',this)">🔄 Animate Replace</div>
+          </div>
+
+          <!-- MOVE PANEL -->
+          <div id="wan-move-panel">
+            <div class="row2" style="margin-bottom:14px">
+              <div>
+                <label class="fl">Model Photo</label>
+                <div id="wan-move-img-slot" onclick="document.getElementById('wan-move-img-fi').click()" style="aspect-ratio:3/4;background:var(--card);border:1.5px dashed var(--border);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;overflow:hidden;transition:border-color .18s">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted2)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  <span style="font-size:10px;color:var(--muted2)">Click to upload</span>
+                </div>
+                <input type="file" id="wan-move-img-fi" accept="image/*" style="display:none">
+              </div>
+              <div>
+                <label class="fl">Driving Video</label>
+                <div id="wan-move-vid-slot" onclick="document.getElementById('wan-move-vid-fi').click()" style="aspect-ratio:3/4;background:var(--card);border:1.5px dashed var(--border);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;overflow:hidden;transition:border-color .18s">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted2)" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                  <span style="font-size:10px;color:var(--muted2)">Trend / reference clip</span>
+                </div>
+                <input type="file" id="wan-move-vid-fi" accept="video/*" style="display:none">
+              </div>
+            </div>
+            <div class="fg">
+              <label class="fl">Resolution</label>
+              <div style="display:flex;gap:6px">
+                <div class="src-pill" onclick="selWanRes(this,'wan-move')">480p</div>
+                <div class="src-pill" onclick="selWanRes(this,'wan-move')">580p</div>
+                <div class="src-pill active" onclick="selWanRes(this,'wan-move')">720p</div>
+              </div>
+            </div>
+            <div class="cost-prev">Est. cost: <strong>~$0.25</strong> per generation</div>
+            <button class="gen-btn" id="wan-move-btn" onclick="startWanAnimate('move')">🕺 Generate Animated Video</button>
+          </div>
+
+          <!-- REPLACE PANEL -->
+          <div id="wan-replace-panel" style="display:none">
+            <div class="row2" style="margin-bottom:14px">
+              <div>
+                <label class="fl">Model Photo</label>
+                <div id="wan-replace-img-slot" onclick="document.getElementById('wan-replace-img-fi').click()" style="aspect-ratio:3/4;background:var(--card);border:1.5px dashed var(--border);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;overflow:hidden;transition:border-color .18s">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted2)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  <span style="font-size:10px;color:var(--muted2)">Click to upload</span>
+                </div>
+                <input type="file" id="wan-replace-img-fi" accept="image/*" style="display:none">
+              </div>
+              <div>
+                <label class="fl">Source Video</label>
+                <div id="wan-replace-vid-slot" onclick="document.getElementById('wan-replace-vid-fi').click()" style="aspect-ratio:3/4;background:var(--card);border:1.5px dashed var(--border);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;overflow:hidden;transition:border-color .18s">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted2)" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                  <span style="font-size:10px;color:var(--muted2)">Footage to insert her into</span>
+                </div>
+                <input type="file" id="wan-replace-vid-fi" accept="video/*" style="display:none">
+              </div>
+            </div>
+            <div class="fg">
+              <label class="fl">Resolution</label>
+              <div style="display:flex;gap:6px">
+                <div class="src-pill" onclick="selWanRes(this,'wan-replace')">480p</div>
+                <div class="src-pill" onclick="selWanRes(this,'wan-replace')">580p</div>
+                <div class="src-pill active" onclick="selWanRes(this,'wan-replace')">720p</div>
+              </div>
+            </div>
+            <div class="cost-prev">Est. cost: <strong>~$0.30</strong> per generation</div>
+            <button class="gen-btn" id="wan-replace-btn" onclick="startWanAnimate('replace')">🔄 Generate Replaced Video</button>
+          </div>
         </div>
       </div>
     </div>
@@ -985,10 +1068,19 @@ const COSTS = {
   'nano-banana-pro':                     0.040,
   'nano-banana-2':                       0.040,
   'google/nano-banana':                  0.020,
+  'z-image/turbo':                       0.020,
+  'z-image/spicy':                       0.040,
+  'openai/gpt-image-1.5':               0.080,
+  'qwen/image-edit':                     0.060,
+  'alibaba/wan2.7-image':               0.050,
+  'bytedance/seedream5-lite':            0.070,
   'grok-imagine/text-to-image':          0.060,
   'google/imagen4':                      0.050,
   'google/imagen4-ultra':                0.080,
   'gpt-image-2-text-to-image':           0.040,
+  // ── Wan Animate ──
+  'wan/2-2-animate-move':                0.250,
+  'wan/2-2-animate-replace':             0.300,
   // ── KIE video ──
   'kling/v2-1-standard':                 0.125,
   'kling/v2-1-pro':                      0.250,
@@ -1019,7 +1111,7 @@ let hModelFil = 'all', hTypeFil = 'all';
 let imageProvider = 'kie'; // 'laozhang' | 'kie' — KIE default (Laozhang needs top-up)
 let videoProvider = 'kie';      // 'laozhang' | 'kie' — KIE is default for video
 
-const KIE_IMAGE_MODELS = new Set(['nano-banana-pro','nano-banana-2','google/nano-banana','grok-imagine/text-to-image','google/imagen4','google/imagen4-ultra','gpt-image-2-text-to-image']);
+const KIE_IMAGE_MODELS = new Set(['nano-banana-pro','nano-banana-2','google/nano-banana','z-image/turbo','z-image/spicy','openai/gpt-image-1.5','qwen/image-edit','alibaba/wan2.7-image','bytedance/seedream5-lite','grok-imagine/text-to-image','google/imagen4','google/imagen4-ultra','gpt-image-2-text-to-image']);
 const LZ_IMAGE_MODELS  = new Set(['gpt-image-1.5','gpt-image-2','gpt-image-2-all','gpt-image-2-vip','gemini-2.5-flash-image','gemini-3.1-flash-image-preview','gemini-3-pro-image-preview','gpt-image-1','seedream/4.5-edit','seedream/4.5-text-to-image','bytedance/seedream-v4-text-to-image','bytedance/seedream','grok-2-aurora','imagen-3.0-generate-002','flux-kontext-max','flux-kontext-pro','flux-1.1-pro','flux-1-dev','flux-1-schnell']);
 
 // Models confirmed to support reference photos (image_input sent to API)
@@ -1116,13 +1208,15 @@ function setVideoProvider(p) {
   $('lz-vid-opts').style.display  = p === 'laozhang' ? '' : 'none';
   if ($('vi-model-row')) $('vi-model-row').style.display = p === 'laozhang' ? 'none' : '';
   updateKieModeRow();
-  // Motion Control is KIE-only — hide that sub-tab when Laozhang selected
+  // Motion Control and Wan Animate are KIE-only — hide those sub-tabs when Laozhang selected
   if ($('vs-mc-tab')) $('vs-mc-tab').style.display = p === 'laozhang' ? 'none' : '';
-  // If Motion Control was active and we switched to Laozhang, reset to Text to Video
+  if ($('vs-wan-tab')) $('vs-wan-tab').style.display = p === 'laozhang' ? 'none' : '';
+  // If a KIE-only sub-tab was active and we switched to Laozhang, reset to Text to Video
   if (p === 'laozhang') {
     document.querySelectorAll('.stab[data-vs]').forEach(t => t.classList.remove('active'));
     $('vs-txt') && ($('vs-txt').style.display = '');
     $('vs-mc') && ($('vs-mc').style.display = 'none');
+    $('vs-wan') && ($('vs-wan').style.display = 'none');
     document.querySelector('.stab[data-vs="txt"]')?.classList.add('active');
   }
   updateCostPreviews();
@@ -1384,6 +1478,7 @@ function bindAll() {
     document.querySelectorAll('.stab[data-vs]').forEach(x=>x.classList.remove('active')); t.classList.add('active');
     $('vs-txt').style.display = activeVidSub==='txt'?'':'none';
     $('vs-mc').style.display  = activeVidSub==='mc'?'':'none';
+    if ($('vs-wan')) $('vs-wan').style.display = activeVidSub==='wan'?'':'none';
     updateCostPreviews();
   }));
 
@@ -1414,6 +1509,10 @@ function bindAll() {
   $('mc-sync-audio').addEventListener('change', () => $('mc-sa-track').classList.toggle('vi-toggle-on', $('mc-sync-audio').checked));
   $('mc-img-fi').addEventListener('change', e => handleMcImageUpload(e));
   $('mc-vid-fi').addEventListener('change', e => handleMcVideoUpload(e));
+  _setupWanSlot('wan-move-img-fi',    'wan-move-img-slot',    false);
+  _setupWanSlot('wan-move-vid-fi',    'wan-move-vid-slot',    true);
+  _setupWanSlot('wan-replace-img-fi', 'wan-replace-img-slot', false);
+  _setupWanSlot('wan-replace-vid-fi', 'wan-replace-vid-slot', true);
 
   // Generate buttons
   $('sd-gen').addEventListener('click', () => handleGen('sd'));
@@ -2154,7 +2253,8 @@ function succCard(cid, mid, type, url, prompt, model, cost, sound) {
   // Videos with sound: show controls so user can unmute/play. Videos without: autoplay muted on hover.
   const vidAttrs = sound ? `src="${displayUrl}" loop playsinline controls` : `src="${displayUrl}" loop muted playsinline preload="metadata"`;
   const media=isVid?`<video ${vidAttrs}></video>`:`<img src="${displayUrl}" loading="lazy" alt="">`;
-  card.innerHTML=`${media}<div class="cbadge" style="color:${m.color}">${m.name}</div><div class="ctype">${isVid?'Video':'Image'}</div><div class="covlay"><div class="covprompt">${esc(prompt)}</div><div class="covact"><button class="covbtn" onclick="dlUrl('${url}','${cid}')">Download</button><button class="covbtn" onclick="cpUrl('${url}')">Copy URL</button><span class="covcost">~${f$(cost)}</span></div></div>`;
+  const mediaType = isVid ? 'video' : 'image';
+  card.innerHTML=`${media}<div class="cbadge" style="color:${m.color}">${m.name}</div><div class="ctype">${isVid?'Video':'Image'}</div><div class="covlay"><div class="covprompt">${esc(prompt)}</div><div class="covact"><button class="covbtn" onclick="dlUrl('${url}','${cid}')">Download</button><button class="covbtn" onclick="cpUrl('${url}')">Copy URL</button><button class="covbtn" id="up4k-${cid}" onclick="upscaleResult('${cid}','${mediaType}','${url}')">4K ↑</button><span class="covcost">~${f$(cost)}</span></div></div>`;
   if(isVid && !sound){const v=card.querySelector('video');v.play().catch(()=>{}); card.addEventListener('mouseenter',()=>v.play());card.addEventListener('mouseleave',()=>{v.pause();v.currentTime=0;});}
   if(isVid && sound){const v=card.querySelector('video');v.play().catch(()=>{});} // try autoplay, user can unmute with controls
   updateBadge();
@@ -2250,6 +2350,151 @@ function clrOutput() {
   pendingJobs.clear(); // cancel any in-flight so ghost completions don't re-render
   items=[]; $('ogrid').innerHTML=''; $('ogrid').style.display='none';
   $('empty').classList.remove('hidden'); updateBadge();
+}
+
+// ── 4K UPSCALE ──
+async function upscaleResult(cid, mediaType, sourceUrl) {
+  const btn = document.getElementById('up4k-' + cid);
+  if (!btn || btn.disabled) return;
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner" style="width:10px;height:10px;border-width:1.5px;border-color:rgba(255,255,255,.2);border-top-color:#fff;display:inline-block;vertical-align:middle"></div>';
+
+  const upscaleJobId = uid();
+
+  const onComplete = ({ job_id, url }) => {
+    if (job_id !== upscaleJobId) return;
+    if (socket) { socket.off('job:complete', onComplete); socket.off('job:failed', onFail); }
+    const card = $('c-' + cid);
+    if (card) {
+      const media = card.querySelector('img, video');
+      if (media) { const fullUrl = url.startsWith('/') ? BASE_URL + url : url; media.src = fullUrl; }
+      const typeEl = card.querySelector('.ctype');
+      if (typeEl && !typeEl.textContent.includes('4K')) typeEl.textContent += ' · 4K';
+    }
+    btn.textContent = '✓ 4K';
+    btn.style.opacity = '0.5';
+    btn.style.pointerEvents = 'none';
+  };
+
+  const onFail = ({ job_id, error }) => {
+    if (job_id !== upscaleJobId) return;
+    if (socket) { socket.off('job:complete', onComplete); socket.off('job:failed', onFail); }
+    btn.disabled = false;
+    btn.textContent = origText;
+    alert('Upscale failed: ' + (error || 'Unknown error'));
+  };
+
+  if (socket) { socket.on('job:complete', onComplete); socket.on('job:failed', onFail); }
+
+  const endpoint = mediaType === 'video' ? '/api/upscale/video' : '/api/upscale/image';
+  try {
+    const r = await fetch(BASE_URL + endpoint, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ job_id: upscaleJobId, source_url: sourceUrl, operator: currentOperator, socket_id: socket?.id || '' })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+  } catch(e) {
+    if (socket) { socket.off('job:complete', onComplete); socket.off('job:failed', onFail); }
+    btn.disabled = false;
+    btn.textContent = origText;
+    alert('Upscale request failed: ' + e.message);
+  }
+}
+
+// ── WAN ANIMATE ──
+let wanMoveImageB64 = null, wanMoveVideoFile = null;
+let wanReplaceImageB64 = null, wanReplaceVideoFile = null;
+
+function selWanMode(mode, el) {
+  document.querySelectorAll('#wan-subtabs .stab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  $('wan-move-panel').style.display = mode === 'move' ? '' : 'none';
+  $('wan-replace-panel').style.display = mode === 'replace' ? '' : 'none';
+}
+
+function selWanRes(el, prefix) {
+  el.parentElement.querySelectorAll('.src-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+}
+
+async function startWanAnimate(mode) {
+  const imageB64  = mode === 'move' ? wanMoveImageB64    : wanReplaceImageB64;
+  const videoFile = mode === 'move' ? wanMoveVideoFile   : wanReplaceVideoFile;
+  if (!imageB64)  { alert('Upload a model photo first.'); return; }
+  if (!videoFile) { alert('Upload a ' + (mode==='move'?'driving':'source') + ' video first.'); return; }
+  if (!getCldReady()) { alert('Cloudinary not configured — add Cloud Name + Upload Preset in Settings.'); return; }
+
+  const resPill = document.querySelector(`#wan-${mode}-panel .src-pill.active`);
+  const res = resPill ? resPill.textContent.trim() : '720p';
+  const btn = $(mode === 'move' ? 'wan-move-btn' : 'wan-replace-btn');
+  const origLabel = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Uploading image…';
+
+  let imageUrl, videoUrl;
+  try {
+    imageUrl = await uploadCld(imageB64, 'wan_' + mode + '_img_' + Date.now());
+    btn.innerHTML = '<div class="spinner"></div> Uploading video…';
+    videoUrl = await uploadCldVideo(videoFile, 'wan_' + mode + '_vid_' + Date.now());
+  } catch(e) {
+    btn.disabled = false; btn.textContent = origLabel;
+    alert('Upload failed: ' + e.message); return;
+  }
+
+  btn.innerHTML = '<div class="spinner"></div> Submitting…';
+  const cid = uid();
+  const wanModel = 'wan/2-2-animate-' + mode;
+  const label = mode === 'move' ? 'Wan Animate Move' : 'Wan Animate Replace';
+  addPend(cid, activeModel, 'video', label, label, '9:16');
+  pendingJobs.set(cid, { mid: activeModel, type: 'video', prompt: label, model: wanModel, cost: COSTS[wanModel] || 0.25, ratio: '9:16' });
+
+  fetch(BASE_URL + '/api/wan-animate/' + mode, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      job_id: cid, image_url: imageUrl, video_url: videoUrl,
+      resolution: res, model_name: label,
+      operator: currentOperator, socket_id: socket?.id || ''
+    })
+  }).catch(e => { pendingJobs.delete(cid); failCard(cid, e.message || 'Submit failed'); });
+
+  btn.disabled = false;
+  btn.textContent = origLabel;
+}
+
+function _setupWanSlot(inputId, slotId, isVideo) {
+  const fi = $(inputId);
+  if (!fi) return;
+  fi.addEventListener('change', e => {
+    const file = e.target.files[0]; if (!file) return;
+    const slot = $(slotId);
+    if (isVideo) {
+      if (inputId.includes('move')) wanMoveVideoFile = file;
+      else wanReplaceVideoFile = file;
+      if (slot) {
+        slot.innerHTML = '';
+        const vid = document.createElement('video');
+        vid.src = URL.createObjectURL(file);
+        vid.style.cssText = 'width:100%;height:100%;object-fit:cover';
+        vid.muted = true; vid.loop = true; vid.play();
+        slot.appendChild(vid);
+      }
+    } else {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        if (inputId.includes('move')) wanMoveImageB64 = ev.target.result;
+        else wanReplaceImageB64 = ev.target.result;
+        if (slot) {
+          slot.innerHTML = '';
+          const img = document.createElement('img');
+          img.src = ev.target.result;
+          img.style.cssText = 'width:100%;height:100%;object-fit:cover';
+          slot.appendChild(img);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  });
 }
 
 // ── MODEL IDENTITY PANEL ──
