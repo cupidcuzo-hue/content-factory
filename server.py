@@ -174,6 +174,13 @@ KIE_IMAGE_COSTS = {
     # Google Imagen 4 via KIE
     'google/imagen4':               0.050,
     'google/imagen4-ultra':         0.080,
+    # V2 additions
+    'z-image/turbo':                0.020,
+    'z-image/spicy':                0.040,
+    'openai/gpt-image-1.5':         0.080,
+    'qwen/image-edit':              0.060,
+    'alibaba/wan2.7-image':         0.050,
+    'bytedance/seedream5-lite':     0.070,
 }
 
 VIDEO_COSTS = {
