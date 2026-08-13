@@ -313,6 +313,103 @@ input[type=color]{width:0;height:0;opacity:0;position:absolute}
 }
 
 #mfab{display:none;position:fixed;bottom:16px;right:16px;z-index:199;width:52px;height:52px;background:linear-gradient(135deg,var(--gold),var(--gold2));border-radius:50%;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 20px rgba(212,175,55,.4);border:none;font-size:22px;color:#09090f;font-weight:700}
+
+/* ── CONTENT FACTORY EXPERIENCE OVERHAUL ────────────────────────────────
+   Visual layer only: IDs, generator actions, API calls, and state remain intact. */
+:root{--surface:#090909;--card:#111111;--border:#262626;--muted:#5f5f5f;--muted2:#a8a8a8;--gold:#ffffff;--gold2:#e8e8e8;--gold-dim:#777777}
+body{font-size:14px;background:radial-gradient(ellipse 70% 45% at 82% 100%,rgba(201,168,76,.06),transparent 65%),var(--bg)}
+#topbar{height:66px;min-height:66px;padding:0 28px;gap:10px;background:rgba(9,9,9,.94);backdrop-filter:blur(18px);border-color:var(--border)}
+.topbar-logo{font-size:22px;letter-spacing:-.02em;color:var(--text)}
+.topbar-logo span{font-size:10px;color:var(--muted2);letter-spacing:.14em;margin-left:9px}
+.topbar-stat{height:32px;padding:0 11px;background:rgba(255,255,255,.035);border-radius:9px;color:var(--muted2)}
+.topbar-btn{height:34px;padding:0 12px;border-radius:9px;background:transparent;color:var(--muted2)}
+.topbar-btn:hover{background:var(--card);border-color:#494949;color:var(--text)}
+#modelbar{height:66px;min-height:66px;padding:0 28px;gap:10px;background:rgba(8,8,8,.92);border-color:var(--border);scrollbar-width:none}
+#modelbar::-webkit-scrollbar{display:none}
+.model-chip{min-height:38px;padding:8px 16px;border-radius:12px;background:rgba(255,255,255,.025);border-color:var(--border);font-size:12px;color:var(--muted2)}
+.model-chip:hover{background:rgba(255,255,255,.055);border-color:#4a4a4a}
+.model-chip.msel{background:rgba(255,255,255,.07);border-color:#e0e0e0;color:var(--text);box-shadow:0 0 0 1px rgba(255,255,255,.08)}
+.model-chip .mdot{width:8px;height:8px;box-shadow:0 0 10px currentColor}
+.multi-toggle{min-height:38px;padding:8px 15px;margin-left:8px;border-radius:10px;background:transparent;color:var(--muted2)}
+.multi-toggle.active{background:rgba(255,255,255,.07);border-color:#e0e0e0;color:var(--text)}
+#main{gap:0;background:transparent}
+#lpanel{width:390px;min-width:390px;background:rgba(10,10,10,.88);border-color:var(--border);box-shadow:18px 0 50px rgba(0,0,0,.14)}
+.ptabs{padding:12px 14px 0;gap:6px;border:0;background:rgba(0,0,0,.15)}
+.ptab{padding:10px 8px;border:1px solid transparent;border-radius:9px 9px 0 0;font-size:12px;letter-spacing:.02em}
+.ptab.active{background:var(--card);border-color:var(--border);border-bottom-color:var(--card);color:var(--text)}
+.pscroll{padding:20px 18px 30px;background:var(--card)}
+.stabs{padding:4px;gap:5px;border:1px solid var(--border);border-radius:10px;background:#0b0b0b}
+.stab{min-height:34px;padding:8px;border-radius:7px;font-size:11px}
+.stab.active{background:#202020;color:var(--text);box-shadow:0 1px 5px rgba(0,0,0,.35)}
+.src-row{padding:11px 0 15px;gap:8px}
+.src-lbl,.fl{font-size:10px;color:var(--muted2);font-weight:600;letter-spacing:.1em}
+.src-pill{min-height:32px;padding:7px 13px;border-radius:9px;background:#0b0b0b}
+.src-pill.active{background:rgba(255,255,255,.08);border-color:#d0d0d0;color:#fff}
+.fg{margin-bottom:18px}
+textarea,select,input[type=text],input[type=password]{min-height:42px;padding:11px 12px;border-radius:10px;background:#0b0b0b;border-color:#2d2d2d;font-size:13px}
+textarea{min-height:112px;line-height:1.55}
+textarea.sm{min-height:68px}
+textarea:focus,select:focus,input:focus{border-color:#8a8a8a;box-shadow:0 0 0 3px rgba(255,255,255,.06)}
+.row2{gap:10px}
+.upload-btn{min-height:44px;border-radius:10px;background:#0b0b0b;border-color:#3a3a3a;font-weight:600}
+.info-chip{padding:9px 11px;border-radius:9px;background:#0b0b0b}
+.cost-prev{padding:10px 12px;margin:4px 0 12px;border-radius:9px;background:rgba(255,255,255,.035);font-size:11px}
+.gen-btn{min-height:48px;border-radius:11px;font-size:13px;letter-spacing:.02em;box-shadow:0 12px 28px rgba(255,255,255,.08)}
+.gen-btn:hover{box-shadow:0 14px 30px rgba(255,255,255,.14)}
+#rpanel{position:relative;background:radial-gradient(ellipse 80% 80% at 70% 100%,rgba(201,168,76,.055),transparent 65%),#050505}
+.obar{min-height:64px;padding:12px 24px;background:rgba(8,8,8,.84);backdrop-filter:blur(16px);border-color:var(--border)}
+.obar-title{font:700 20px 'Playfair Display',serif;letter-spacing:-.02em}
+.badge{padding:4px 10px;background:rgba(255,255,255,.08);border-color:#4b4b4b;color:#fff}
+.obtn{min-height:34px;padding:7px 12px;border-radius:9px;background:rgba(255,255,255,.03);font-size:11px}
+#empty{max-width:480px;align-self:center;margin:auto;padding:52px 38px;border:1px dashed #2d2d2d;border-radius:22px;background:linear-gradient(145deg,rgba(255,255,255,.035),transparent);text-align:center}
+.empty-logo{font-size:46px;letter-spacing:-.04em;color:#777;opacity:1}
+#empty > div:last-child{font-size:14px!important;color:var(--muted2)!important;line-height:1.7}
+#ogrid{padding:24px;gap:16px}
+.msec-title{font-size:10px;color:var(--muted2);padding:8px 0 12px}
+.gcard{border-radius:14px;border-color:#2b2b2b;box-shadow:0 12px 34px rgba(0,0,0,.22)}
+.gcard:hover{border-color:#6d6d6d;transform:translateY(-3px)}
+#spanel{padding:28px;width:420px;background:#0b0b0b;border-color:#2b2b2b}
+.sclose{width:38px;height:38px;border:1px solid var(--border);border-radius:10px}
+
+@media(max-width:768px){
+  html,body,#app{height:100%;height:100dvh;overflow:hidden}
+  #topbar{height:58px;min-height:58px;padding:0 16px;gap:8px}
+  .topbar-logo{font-size:20px}
+  .topbar-logo span{display:none}
+  #topbar .topbar-spacer{display:block}
+  .topbar-btn{width:36px;min-width:36px;padding:0;justify-content:center;font-size:0;border-radius:10px}
+  .topbar-btn svg{width:16px;height:16px}
+  #modelbar{height:62px;min-height:62px;padding:0 16px;gap:8px;overflow-x:auto}
+  #mchips{gap:8px!important}
+  .model-chip{min-height:40px;padding:9px 15px!important;border-radius:12px;font-size:13px!important}
+  .multi-toggle{position:sticky;right:0;margin-left:0;min-height:40px;padding:9px 14px;background:#141414;box-shadow:-12px 0 18px #080808}
+  #rpanel{padding-bottom:90px;overflow-y:auto}
+  .obar{min-height:58px;padding:10px 16px;position:sticky;top:0;z-index:12}
+  .obar-title{font-size:18px}
+  .obar .osp{display:none}
+  .obtn{min-height:38px;padding:7px 10px;font-size:11px}
+  #empty{margin:32px 16px;padding:42px 22px;min-height:300px}
+  .empty-logo{font-size:42px}
+  #ogrid{padding:16px;gap:10px}
+  #lpanel{max-height:min(82dvh,760px);border-radius:22px 22px 0 0;background:#111;box-shadow:0 -20px 60px rgba(0,0,0,.6)}
+  #lpanel::before{width:42px;height:5px;margin:10px auto 5px;background:#4a4a4a}
+  .ptabs{padding:5px 14px 0;background:#111}
+  .ptab{min-height:43px;padding:11px 8px;font-size:13px}
+  .pscroll{padding:20px 16px calc(120px + env(safe-area-inset-bottom));background:#111}
+  .fg{margin-bottom:20px}
+  textarea,select,input[type=text],input[type=password]{min-height:48px;padding:12px 13px}
+  textarea{min-height:130px}
+  .gen-btn{min-height:54px;border-radius:13px;margin:14px 0 0;box-shadow:0 -8px 30px #111,0 12px 28px rgba(255,255,255,.1)}
+  #mfab{display:flex!important;bottom:calc(16px + env(safe-area-inset-bottom));right:16px;width:auto;min-width:126px;height:54px;padding:0 19px;border-radius:15px;gap:9px;font-size:22px;box-shadow:0 12px 32px rgba(255,255,255,.22)}
+  #mfab::after{content:'Create';font:700 13px 'Inter',sans-serif;letter-spacing:.02em}
+  #spanel{width:100%;max-width:100%;border-left:0;border-radius:22px 22px 0 0;top:auto;max-height:90dvh}
+}
+
+@media(max-width:390px){
+  .obar .dng{display:none}
+  #empty{padding:34px 18px}
+  .model-chip{padding:9px 13px!important}
+}
 </style>
 </head>
 <body>
