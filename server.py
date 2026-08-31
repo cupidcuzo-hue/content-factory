@@ -14,7 +14,7 @@ import os, sys, json, time, io, threading, sqlite3, datetime, logging
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, abort
 from flask_socketio import SocketIO
 
 # ── Startup env checks ────────────────────────────────────────────────────────
@@ -31,6 +31,13 @@ if _missing:
 GOOGLE_SA_JSON       = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON', '')
 GOOGLE_DRIVE_FOLDER  = os.environ.get('GOOGLE_DRIVE_FOLDER_ID', '')
 DB_PATH              = os.environ.get('DB_PATH', 'data/content_factory.db')
+CUZO_SERVICE_TOKEN    = os.environ.get('CUZO_SERVICE_TOKEN', '')
+ALLOWED_ORIGINS       = {
+    origin.strip().rstrip('/') for origin in os.environ.get(
+        'ALLOWED_ORIGINS',
+        'https://cuzoinhouse.space,https://www.cuzoinhouse.space,https://cuzoinhouse.com,https://www.cuzoinhouse.com'
+    ).split(',') if origin.strip()
+}
 
 # Public URL of this server — used to host start frames for KIE (since KIE file upload returns 404)
 # Railway sets RAILWAY_PUBLIC_DOMAIN automatically; fallback to known URL
@@ -41,24 +48,52 @@ SERVER_URL = f'https://{_railway_domain}'
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'cuzo-cf-secret-2025')
-socketio = SocketIO(app, cors_allowed_origins='*', async_mode='eventlet')
+socketio = SocketIO(app, cors_allowed_origins=list(ALLOWED_ORIGINS), async_mode='eventlet')
 
-# ── CORS — allow requests from any origin (iframe, file://, external) ─────────
+# ── Native CUZO access boundary ──────────────────────────────────────────────
+def _same_origin_request():
+    origin = (request.headers.get('Origin') or '').rstrip('/')
+    referer = request.headers.get('Referer') or ''
+    host_url = request.host_url.rstrip('/')
+    return (not origin and (not referer or referer.startswith(host_url))) or origin == host_url
+
+@app.before_request
+def protect_api_mutations():
+    if request.method == 'OPTIONS' or not request.path.startswith('/api/'):
+        return None
+    if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+        supplied = request.headers.get('X-CUZO-Service-Token') or request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
+        if not _same_origin_request() and (not CUZO_SERVICE_TOKEN or supplied != CUZO_SERVICE_TOKEN):
+            abort(401, description='CUZO service authentication required')
+    if request.path.startswith('/api/debug/'):
+        supplied = request.headers.get('X-CUZO-Service-Token') or request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
+        if not CUZO_SERVICE_TOKEN or supplied != CUZO_SERVICE_TOKEN:
+            abort(404)
+    return None
+
 @app.after_request
 def add_cors(response):
-    response.headers['Access-Control-Allow-Origin']  = '*'
+    origin = (request.headers.get('Origin') or '').rstrip('/')
+    if origin in ALLOWED_ORIGINS:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Vary'] = 'Origin'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-CUZO-Service-Token'
     return response
 
 @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
 @app.route('/<path:path>', methods=['OPTIONS'])
 def options_handler(path):
     from flask import Response
-    return Response(status=200, headers={
-        'Access-Control-Allow-Origin':  '*',
+    origin = (request.headers.get('Origin') or '').rstrip('/')
+    headers = {
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-CUZO-Service-Token',
+    }
+    if origin in ALLOWED_ORIGINS:
+        headers['Access-Control-Allow-Origin'] = origin
+    return Response(status=200, headers={
+        **headers,
     })
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
